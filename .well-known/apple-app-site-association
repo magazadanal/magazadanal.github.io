@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "6LSP96MK35.com.magazadanal.app"
+        ],
+        "components": [
+          {
+            "/": "/auth/confirmed/*",
+            "comment": "E-posta doğrulama bağlantıları"
+          },
+          {
+            "/": "/auth/recovery/*",
+            "comment": "PKCE şifre yenileme bağlantıları"
+          }
+        ]
+      }
+    ]
+  }
+}
