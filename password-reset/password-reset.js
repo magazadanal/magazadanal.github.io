@@ -10,9 +10,11 @@
   const statusElement = document.getElementById("reset-status");
 
   const query = new URLSearchParams(window.location.search);
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
   let tokenHash = query.get("token_hash");
-  const recoveryType = query.get("type");
-  let recoveryAccessToken = null;
+  const recoveryType = query.get("type") || fragment.get("type");
+  const linkError = query.get("error_description") || fragment.get("error_description");
+  let recoveryAccessToken = fragment.get("access_token");
 
   window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -113,8 +115,14 @@
     }
   });
 
-  if (!tokenHash || recoveryType !== "recovery") {
+  if (linkError) {
     tokenHash = null;
+    recoveryAccessToken = null;
+    showStatus("Bu bağlantı geçersiz, kullanılmış veya süresi dolmuş. Uygulamadan yeni bir bağlantı iste.", "error");
+    setFormEnabled(false);
+  } else if ((!tokenHash && !recoveryAccessToken) || recoveryType !== "recovery") {
+    tokenHash = null;
+    recoveryAccessToken = null;
     showStatus("Bu bağlantı geçersiz veya eksik. Uygulamadan yeni bir parola yenileme bağlantısı iste.", "error");
     setFormEnabled(false);
   }
