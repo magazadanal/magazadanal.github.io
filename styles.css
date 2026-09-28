@@ -44,6 +44,12 @@ header {
 
 nav a, footer a { color: var(--teal); font-weight: 650; }
 
+.header-link {
+  color: var(--teal);
+  font-weight: 650;
+  text-decoration: none;
+}
+
 main { padding: 56px 0 72px; }
 
 h1 {
@@ -62,6 +68,12 @@ p, li { color: var(--muted); }
   background: var(--panel);
 }
 
+.status[hidden] { display: none; }
+
+.status-error { border-left-color: #b42318; color: #7a271a; }
+
+.status-success { border-left-color: var(--teal); color: #215f57; }
+
 .button {
   display: inline-block;
   margin-top: 12px;
@@ -70,6 +82,60 @@ p, li { color: var(--muted); }
   color: var(--teal);
   font-weight: 700;
   text-decoration: none;
+}
+
+.auth-page { max-width: 560px; }
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.auth-form label {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 50px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.auth-form input:focus {
+  border-color: var(--teal);
+  outline: 2px solid rgba(46, 112, 104, 0.2);
+  outline-offset: 1px;
+}
+
+.primary-button {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 6px;
+  background: var(--teal);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 footer {

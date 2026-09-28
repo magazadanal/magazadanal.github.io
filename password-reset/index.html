@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; connect-src https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+  >
+  <title>Parola yenileme · Mağazadan Al</title>
+  <meta name="description" content="Mağazadan Al hesabınız için güvenli parola yenileme sayfası.">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <a class="brand" href="/">MAĞAZADAN AL</a>
+      <a class="header-link" href="/privacy/">Gizlilik</a>
+    </div>
+  </header>
+  <main class="auth-page">
+    <p class="eyebrow">Hesap güvenliği</p>
+    <h1>Yeni parola belirle</h1>
+    <p>Yeni parolan en az 8 karakter olmalıdır.</p>
+
+    <div id="reset-status" class="status" role="status" aria-live="polite" hidden></div>
+
+    <form id="password-reset-form" class="auth-form" novalidate>
+      <label for="new-password">Yeni parola</label>
+      <input
+        id="new-password"
+        name="new-password"
+        type="password"
+        autocomplete="new-password"
+        minlength="8"
+        maxlength="72"
+        required
+      >
+
+      <label for="confirm-password">Yeni parola tekrar</label>
+      <input
+        id="confirm-password"
+        name="confirm-password"
+        type="password"
+        autocomplete="new-password"
+        minlength="8"
+        maxlength="72"
+        required
+      >
+
+      <button id="submit-button" class="button primary-button" type="submit">
+        Parolayı güncelle
+      </button>
+    </form>
+  </main>
+  <footer><a href="/privacy/">Gizlilik politikası</a></footer>
+  <script src="/password-reset/password-reset.js" defer></script>
+</body>
+</html>
