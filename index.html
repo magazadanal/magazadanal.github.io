@@ -6,7 +6,7 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'"
+    content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
   >
   <title>Mağazadan Al</title>
   <meta name="description" content="Mağazadan Al müşteri hesabı ve resmi web alanı.">
@@ -15,7 +15,9 @@
 <body>
   <header>
     <div class="bar">
-      <a class="brand" href="/">MAĞAZADAN AL</a>
+      <a class="brand" href="/" aria-label="Mağazadan Al ana sayfa">
+        <img class="brand-logo" src="/assets/magazadanal-logo.png" alt="Mağazadan Al" width="1024" height="1024">
+      </a>
       <nav class="site-nav" aria-label="Ana menü">
         <a href="/privacy/">Gizlilik</a>
         <a class="header-account-link" href="/hesabim/">Hesabım</a>

@@ -4,6 +4,11 @@
   const SUPABASE_URL = "https://zxqqbzggfbxoasyhueqb.supabase.co";
   const PUBLISHABLE_KEY = "sb_publishable_WaikEJpLmpvHj8Jv5u5k9g_j3YngnF_";
   const SESSION_KEY = "magazadanal.web.session.v1";
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Restricted browser storage must not prevent a memory-only session.
+  }
   const ACTIVE_ORDER_STATUSES = new Set([
     "draft",
     "payment_waiting",
@@ -133,10 +138,18 @@
   function saveSession(session) {
     state.session = session;
     if (session) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      } catch {
+        // The current page can continue with the in-memory session.
+      }
       scheduleRefresh();
     } else {
-      localStorage.removeItem(SESSION_KEY);
+      try {
+        sessionStorage.removeItem(SESSION_KEY);
+      } catch {
+        // There may be no persisted session to clear.
+      }
       if (state.refreshTimer) window.clearTimeout(state.refreshTimer);
       state.refreshTimer = null;
     }
@@ -144,7 +157,7 @@
 
   function readStoredSession() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(SESSION_KEY));
+      const parsed = JSON.parse(sessionStorage.getItem(SESSION_KEY));
       if (!parsed?.refreshToken || !parsed?.user?.id) return null;
       return parsed;
     } catch {
@@ -197,6 +210,26 @@
   function setPortalVisible(isVisible) {
     elements.authView.hidden = isVisible;
     elements.portalView.hidden = !isVisible;
+  }
+
+  function clearPortalData() {
+    state.profile = null;
+    state.addresses = [];
+    state.orders = [];
+    state.activities = [];
+    state.supportTickets = [];
+    elements.welcomeTitle.textContent = "Hesabım";
+    elements.lastUpdated.textContent = "";
+    elements.activeOrderCount.textContent = "0";
+    elements.addressCount.textContent = "0";
+    elements.totalOrderCount.textContent = "0";
+    elements.overviewOrders.replaceChildren();
+    elements.ordersList.replaceChildren();
+    elements.addressesList.replaceChildren();
+    elements.supportList.replaceChildren();
+    elements.profileName.textContent = "-";
+    elements.profileEmail.textContent = "-";
+    elements.profilePhone.textContent = "-";
   }
 
   function element(tag, className, text) {
@@ -452,11 +485,7 @@
 
   function handleExpiredSession() {
     saveSession(null);
-    state.profile = null;
-    state.addresses = [];
-    state.orders = [];
-    state.activities = [];
-    state.supportTickets = [];
+    clearPortalData();
     setPortalVisible(false);
     showStatus(elements.authStatus, "Oturumun sona erdi. Lütfen yeniden giriş yap.", "error");
   }
@@ -484,11 +513,13 @@
   async function logout() {
     const token = state.session?.accessToken;
     saveSession(null);
+    clearPortalData();
     setPortalVisible(false);
     elements.password.value = "";
     if (token) {
       await api("/auth/v1/logout", { method: "POST", body: {}, token }).catch(() => {});
     }
+    window.location.replace("/hesabim/");
   }
 
   function openView(viewName) {

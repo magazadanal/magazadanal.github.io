@@ -32,14 +32,27 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 68px;
+  min-height: 88px;
 }
 
 .brand {
-  color: var(--ink);
-  font-size: 19px;
-  font-weight: 750;
+  position: relative;
+  display: block;
+  width: 180px;
+  height: 78px;
+  overflow: hidden;
   text-decoration: none;
+}
+
+.brand-logo {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: block;
+  width: 180px;
+  height: 180px;
+  max-width: none;
+  transform: translateY(-50%);
 }
 
 nav a, footer a { color: var(--teal); font-weight: 650; }
@@ -488,6 +501,9 @@ p, li { color: var(--muted); }
 
 @media (max-width: 700px) {
   h1 { font-size: 32px; }
+  .bar { min-height: 78px; }
+  .brand { width: 150px; height: 66px; }
+  .brand-logo { width: 150px; height: 150px; }
   .portal-page { width: min(100% - 24px, 1180px); padding-top: 22px; }
   .auth-shell { padding: 20px; }
   .portal-toolbar { align-items: flex-start; }
