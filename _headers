@@ -1,0 +1,28 @@
+/*
+  Content-Security-Policy: default-src 'none'; connect-src https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; manifest-src 'self'
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), usb=()
+  Referrer-Policy: no-referrer
+  Strict-Transport-Security: max-age=63072000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-Permitted-Cross-Domain-Policies: none
+
+/hesabim/*
+  Cache-Control: no-store, max-age=0
+  Pragma: no-cache
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/password-reset/*
+  Cache-Control: no-store, max-age=0
+  Pragma: no-cache
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/auth/*
+  Cache-Control: no-store, max-age=0
+  Pragma: no-cache
+  X-Robots-Tag: noindex, nofollow, noarchive
+
+/assets/*
+  Cache-Control: public, max-age=86400
