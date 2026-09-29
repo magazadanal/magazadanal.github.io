@@ -3,21 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'"
+  >
   <title>Mağazadan Al</title>
-  <meta name="description" content="Mağazadan Al resmi bilgi ve gizlilik sayfası.">
+  <meta name="description" content="Mağazadan Al müşteri hesabı ve resmi web alanı.">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header>
     <div class="bar">
       <a class="brand" href="/">MAĞAZADAN AL</a>
-      <nav><a href="/privacy/">Gizlilik</a></nav>
+      <nav class="site-nav" aria-label="Ana menü">
+        <a href="/privacy/">Gizlilik</a>
+        <a class="header-account-link" href="/hesabim/">Hesabım</a>
+      </nav>
     </div>
   </header>
   <main>
     <h1>Mağazadaki ürünü adresine getirelim.</h1>
-    <p>Bu sayfa Mağazadan Al iOS uygulamasının resmi web alanıdır.</p>
-    <a class="button" href="/privacy/">Gizlilik politikasını incele</a>
+    <p>Siparişlerini takip etmek ve hesap bilgilerine ulaşmak için müşteri hesabına giriş yap.</p>
+    <div class="home-actions">
+      <a class="button primary-link" href="/hesabim/">Hesabıma git</a>
+      <a class="button" href="/privacy/">Gizlilik politikası</a>
+    </div>
   </main>
   <footer>© 2026 Mağazadan Al</footer>
 </body>

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; connect-src https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; manifest-src 'self'"
+  >
+  <title>Hesabım · Mağazadan Al</title>
+  <meta name="description" content="Mağazadan Al müşteri hesabı, sipariş takibi ve destek merkezi.">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="bar portal-header">
+      <a class="brand" href="/">MAĞAZADAN AL</a>
+      <a class="header-link" href="/privacy/">Gizlilik</a>
+    </div>
+  </header>
+
+  <main class="portal-page">
+    <section id="auth-view" class="auth-shell" aria-labelledby="auth-title">
+      <p class="eyebrow">Müşteri hesabı</p>
+      <h1 id="auth-title">Hesabına giriş yap</h1>
+      <p>Siparişlerini, adreslerini ve destek mesajlarını görüntüle.</p>
+
+      <div id="auth-status" class="status" role="status" aria-live="polite" hidden></div>
+
+      <form id="login-form" class="auth-form" novalidate>
+        <label for="login-email">Mail adresi</label>
+        <input
+          id="login-email"
+          name="email"
+          type="email"
+          autocomplete="username"
+          inputmode="email"
+          maxlength="254"
+          required
+        >
+
+        <label for="login-password">Şifre</label>
+        <input
+          id="login-password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          minlength="6"
+          maxlength="72"
+          required
+        >
+
+        <label class="password-visibility" for="show-login-password">
+          <input id="show-login-password" type="checkbox">
+          <span>Şifreyi göster</span>
+        </label>
+
+        <button id="login-button" class="button primary-button" type="submit">Giriş yap</button>
+        <button id="forgot-password-button" class="text-button" type="button">Şifremi unuttum</button>
+      </form>
+    </section>
+
+    <section id="portal-view" hidden>
+      <div class="portal-toolbar">
+        <div>
+          <p class="eyebrow">Müşteri paneli</p>
+          <h1 id="welcome-title" class="portal-title">Hesabım</h1>
+          <p id="last-updated" class="portal-updated"></p>
+        </div>
+        <div class="portal-actions">
+          <button id="refresh-button" class="icon-command" type="button" title="Yenile" aria-label="Yenile">↻</button>
+          <button id="logout-button" class="button compact-button" type="button">Çıkış yap</button>
+        </div>
+      </div>
+
+      <div id="portal-status" class="status" role="status" aria-live="polite" hidden></div>
+
+      <nav class="portal-tabs" aria-label="Hesap bölümleri">
+        <button class="portal-tab is-active" type="button" data-view="overview">Özet</button>
+        <button class="portal-tab" type="button" data-view="orders">Siparişler</button>
+        <button class="portal-tab" type="button" data-view="addresses">Adresler</button>
+        <button class="portal-tab" type="button" data-view="support">Bize Ulaşın</button>
+        <button class="portal-tab" type="button" data-view="profile">Profil</button>
+      </nav>
+
+      <div id="portal-loading" class="portal-loading" hidden>Bilgiler yükleniyor...</div>
+
+      <section id="view-overview" class="portal-section" data-panel="overview">
+        <div class="metric-grid" aria-label="Hesap özeti">
+          <article class="metric-card">
+            <span>Aktif sipariş</span>
+            <strong id="active-order-count">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Kayıtlı adres</span>
+            <strong id="address-count">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Toplam sipariş</span>
+            <strong id="total-order-count">0</strong>
+          </article>
+        </div>
+
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Güncel durum</p>
+            <h2>Aktif siparişler</h2>
+          </div>
+          <button class="text-button view-link" type="button" data-open-view="orders">Tümünü gör</button>
+        </div>
+        <div id="overview-orders" class="order-list"></div>
+      </section>
+
+      <section id="view-orders" class="portal-section" data-panel="orders" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Takip</p>
+            <h2>Siparişlerim</h2>
+          </div>
+          <div class="segmented-control" aria-label="Sipariş filtresi">
+            <button class="is-active" type="button" data-order-filter="active">Aktif</button>
+            <button type="button" data-order-filter="history">Geçmiş</button>
+            <button type="button" data-order-filter="all">Tümü</button>
+          </div>
+        </div>
+        <div id="orders-list" class="order-list"></div>
+      </section>
+
+      <section id="view-addresses" class="portal-section" data-panel="addresses" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Teslimat</p>
+            <h2>Kayıtlı adreslerim</h2>
+          </div>
+        </div>
+        <div id="addresses-list" class="data-list"></div>
+      </section>
+
+      <section id="view-support" class="portal-section" data-panel="support" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Destek</p>
+            <h2>Bize Ulaşın</h2>
+          </div>
+        </div>
+        <form id="support-form" class="support-form">
+          <label for="support-message">Mesajın</label>
+          <textarea id="support-message" maxlength="2000" minlength="3" required></textarea>
+          <div class="form-footer">
+            <span id="support-character-count">0 / 2000</span>
+            <button id="support-submit" class="button primary-button compact-submit" type="submit">Gönder</button>
+          </div>
+        </form>
+        <h3 class="list-title">Mesaj geçmişi</h3>
+        <div id="support-list" class="data-list"></div>
+      </section>
+
+      <section id="view-profile" class="portal-section" data-panel="profile" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Hesap</p>
+            <h2>Profil bilgilerim</h2>
+          </div>
+        </div>
+        <dl class="profile-details">
+          <div><dt>Ad soyad</dt><dd id="profile-name">-</dd></div>
+          <div><dt>Mail adresi</dt><dd id="profile-email">-</dd></div>
+          <div><dt>Telefon</dt><dd id="profile-phone">-</dd></div>
+        </dl>
+        <button id="profile-password-reset" class="button compact-button" type="button">Parola yenileme bağlantısı gönder</button>
+      </section>
+    </section>
+  </main>
+
+  <footer><a href="/privacy/">Gizlilik politikası</a></footer>
+  <script src="/hesabim/hesabim.js" defer></script>
+</body>
+</html>
