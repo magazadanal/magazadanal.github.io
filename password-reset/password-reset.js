@@ -6,6 +6,7 @@
   const form = document.getElementById("password-reset-form");
   const passwordInput = document.getElementById("new-password");
   const confirmationInput = document.getElementById("confirm-password");
+  const showPasswordsInput = document.getElementById("show-passwords");
   const submitButton = document.getElementById("submit-button");
   const statusElement = document.getElementById("reset-status");
 
@@ -27,8 +28,15 @@
   function setFormEnabled(isEnabled) {
     passwordInput.disabled = !isEnabled;
     confirmationInput.disabled = !isEnabled;
+    showPasswordsInput.disabled = !isEnabled;
     submitButton.disabled = !isEnabled;
   }
+
+  showPasswordsInput.addEventListener("change", () => {
+    const inputType = showPasswordsInput.checked ? "text" : "password";
+    passwordInput.type = inputType;
+    confirmationInput.type = inputType;
+  });
 
   async function requestJSON(path, options) {
     const response = await fetch(`${supabaseURL}${path}`, {
@@ -101,6 +109,9 @@
       recoveryAccessToken = null;
       passwordInput.value = "";
       confirmationInput.value = "";
+      showPasswordsInput.checked = false;
+      passwordInput.type = "password";
+      confirmationInput.type = "password";
       showStatus("Parolan güncellendi. Mağazadan Al uygulamasına yeni parolanla giriş yapabilirsin.", "success");
       submitButton.textContent = "Parola güncellendi";
     } catch {

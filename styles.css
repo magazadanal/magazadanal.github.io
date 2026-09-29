@@ -106,7 +106,7 @@ p, li { color: var(--muted); }
   font-weight: 700;
 }
 
-.auth-form input {
+.auth-form input:not([type="checkbox"]) {
   width: 100%;
   min-height: 50px;
   padding: 11px 12px;
@@ -117,10 +117,31 @@ p, li { color: var(--muted); }
   font: inherit;
 }
 
-.auth-form input:focus {
+.auth-form input:not([type="checkbox"]):focus {
   border-color: var(--teal);
   outline: 2px solid rgba(46, 112, 104, 0.2);
   outline-offset: 1px;
+}
+
+.password-visibility {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.password-visibility input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--teal);
+}
+
+.password-visibility:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .primary-button {
