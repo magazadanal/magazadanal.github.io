@@ -18,20 +18,18 @@
     "on_the_way"
   ]);
   const ORDER_STEPS = [
-    ["payment_waiting", "Talep alındı"],
-    ["payment_received", "Ödeme onaylandı"],
-    ["courier_assigned", "Kurye atandı"],
-    ["shopping", "Kurye mağazada"],
-    ["on_the_way", "Size doğru yolda"],
-    ["delivered", "Teslim edildi"]
+    "Talep alındı",
+    "Kurye mağazaya doğru yola çıktı",
+    "Ürün alındı, kurye size doğru yolda",
+    "Teslim edildi"
   ];
   const STATUS_LABELS = new Map([
     ["draft", "Talep alındı"],
-    ["payment_waiting", "Ödeme onayı bekleniyor"],
-    ["payment_received", "Ödeme onaylandı"],
-    ["courier_assigned", "Kurye atandı"],
-    ["shopping", "Kurye mağazada"],
-    ["on_the_way", "Size doğru yolda"],
+    ["payment_waiting", "Talep alındı"],
+    ["payment_received", "Talep alındı"],
+    ["courier_assigned", "Talep alındı"],
+    ["shopping", "Kurye mağazaya doğru yola çıktı"],
+    ["on_the_way", "Ürün alındı, kurye size doğru yolda"],
     ["delivered", "Teslim edildi"],
     ["cancelled", "İptal edildi"]
   ]);
@@ -73,10 +71,6 @@
     lastUpdated: document.getElementById("last-updated"),
     refreshButton: document.getElementById("refresh-button"),
     logoutButton: document.getElementById("logout-button"),
-    activeOrderCount: document.getElementById("active-order-count"),
-    addressCount: document.getElementById("address-count"),
-    totalOrderCount: document.getElementById("total-order-count"),
-    overviewOrders: document.getElementById("overview-orders"),
     ordersList: document.getElementById("orders-list"),
     addressesList: document.getElementById("addresses-list"),
     supportForm: document.getElementById("support-form"),
@@ -220,10 +214,6 @@
     state.supportTickets = [];
     elements.welcomeTitle.textContent = "Hesabım";
     elements.lastUpdated.textContent = "";
-    elements.activeOrderCount.textContent = "0";
-    elements.addressCount.textContent = "0";
-    elements.totalOrderCount.textContent = "0";
-    elements.overviewOrders.replaceChildren();
     elements.ordersList.replaceChildren();
     elements.addressesList.replaceChildren();
     elements.supportList.replaceChildren();
@@ -290,17 +280,34 @@
       return timeline;
     }
 
-    const currentIndex = order.status === "draft"
-      ? 0
-      : ORDER_STEPS.findIndex(([status]) => status === order.status);
-    ORDER_STEPS.forEach(([, label], index) => {
+    const orderActivities = state.activities.filter((item) => item.order_id === order.id);
+    const courierStarted = order.status === "shopping"
+      || order.status === "on_the_way"
+      || order.status === "delivered"
+      || orderActivities.some((item) => item.action === "store_departure_started");
+    const currentIndex = order.status === "delivered"
+      ? 3
+      : order.status === "on_the_way"
+        ? 2
+        : courierStarted
+          ? 1
+          : 0;
+    ORDER_STEPS.forEach((label, index) => {
       const item = element("li", index < currentIndex ? "is-complete" : index === currentIndex ? "is-current" : "", label);
       timeline.append(item);
     });
     return timeline;
   }
 
-  function renderOrderCard(order, compact = false) {
+  function customerStatusText(order) {
+    if (order.status === "cancelled" || order.status === "delivered" || order.status === "on_the_way") {
+      return STATUS_LABELS.get(order.status);
+    }
+    const courierStarted = state.activities.some((item) => item.order_id === order.id && item.action === "store_departure_started");
+    return courierStarted ? "Kurye mağazaya doğru yola çıktı" : "Talep alındı";
+  }
+
+  function renderOrderCard(order) {
     const card = element("article", `order-card status-${order.status}`);
     const heading = element("div", "order-card-heading");
     const titleGroup = element("div");
@@ -308,7 +315,7 @@
       element("strong", "order-number", `Sipariş ${orderCode(order)}`),
       element("span", "order-date", formatDate(order.created_at))
     );
-    const status = element("span", "order-status", STATUS_LABELS.get(order.status) || "Güncelleniyor");
+    const status = element("span", "order-status", customerStatusText(order) || "Güncelleniyor");
     heading.append(titleGroup, status);
     card.append(heading);
 
@@ -319,35 +326,29 @@
     );
     card.append(meta);
 
-    if (!compact) {
-      card.append(renderTimeline(order));
-      const activities = state.activities.filter((item) => item.order_id === order.id).slice(-6).reverse();
-      if (activities.length) {
-        const activityList = element("div", "activity-list");
-        activities.forEach((activity) => {
-          const row = element("div", "activity-row");
-          row.append(
-            element("span", "", activityText(activity)),
-            element("time", "", formatDate(activity.created_at))
-          );
-          activityList.append(row);
-        });
-        card.append(activityList);
-      }
+    card.append(renderTimeline(order));
+    const activities = state.activities
+      .filter((item) => item.order_id === order.id)
+      .filter((item) => !(item.action === "status_changed" && item.to_status === "courier_assigned"))
+      .slice(-6)
+      .reverse();
+    if (activities.length) {
+      const activityList = element("div", "activity-list");
+      activities.forEach((activity) => {
+        const row = element("div", "activity-row");
+        row.append(
+          element("span", "", activityText(activity)),
+          element("time", "", formatDate(activity.created_at))
+        );
+        activityList.append(row);
+      });
+      card.append(activityList);
     }
     return card;
   }
 
   function renderOrders() {
     const activeOrders = state.orders.filter((order) => ACTIVE_ORDER_STATUSES.has(order.status));
-    elements.activeOrderCount.textContent = String(activeOrders.length);
-    elements.totalOrderCount.textContent = String(state.orders.length);
-
-    if (activeOrders.length) {
-      elements.overviewOrders.replaceChildren(...activeOrders.slice(0, 3).map((order) => renderOrderCard(order, true)));
-    } else {
-      renderEmpty(elements.overviewOrders, "Aktif sipariş yok", "Yeni bir sipariş oluşturduğunda burada görünecek.");
-    }
 
     let filtered = state.orders;
     if (state.orderFilter === "active") filtered = activeOrders;
@@ -361,7 +362,6 @@
   }
 
   function renderAddresses() {
-    elements.addressCount.textContent = String(state.addresses.length);
     if (!state.addresses.length) {
       renderEmpty(elements.addressesList, "Kayıtlı adres yok", "Adres ekleme işlemini şimdilik iOS uygulamasından yapabilirsin.");
       return;
@@ -603,9 +603,6 @@
 
   document.querySelectorAll(".portal-tab").forEach((button) => {
     button.addEventListener("click", () => openView(button.dataset.view));
-  });
-  document.querySelectorAll("[data-open-view]").forEach((button) => {
-    button.addEventListener("click", () => openView(button.dataset.openView));
   });
   document.querySelectorAll("[data-order-filter]").forEach((button) => {
     button.addEventListener("click", () => {

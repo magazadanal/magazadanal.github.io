@@ -81,8 +81,7 @@
       <div id="portal-status" class="status" role="status" aria-live="polite" hidden></div>
 
       <nav class="portal-tabs" aria-label="Hesap bölümleri">
-        <button class="portal-tab is-active" type="button" data-view="overview">Özet</button>
-        <button class="portal-tab" type="button" data-view="orders">Siparişler</button>
+        <button class="portal-tab is-active" type="button" data-view="orders">Takip</button>
         <button class="portal-tab" type="button" data-view="addresses">Adresler</button>
         <button class="portal-tab" type="button" data-view="support">Bize Ulaşın</button>
         <button class="portal-tab" type="button" data-view="profile">Profil</button>
@@ -90,37 +89,11 @@
 
       <div id="portal-loading" class="portal-loading" hidden>Bilgiler yükleniyor...</div>
 
-      <section id="view-overview" class="portal-section" data-panel="overview">
-        <div class="metric-grid" aria-label="Hesap özeti">
-          <article class="metric-card">
-            <span>Aktif sipariş</span>
-            <strong id="active-order-count">0</strong>
-          </article>
-          <article class="metric-card">
-            <span>Kayıtlı adres</span>
-            <strong id="address-count">0</strong>
-          </article>
-          <article class="metric-card">
-            <span>Toplam sipariş</span>
-            <strong id="total-order-count">0</strong>
-          </article>
-        </div>
-
+      <section id="view-orders" class="portal-section" data-panel="orders">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Güncel durum</p>
-            <h2>Aktif siparişler</h2>
-          </div>
-          <button class="text-button view-link" type="button" data-open-view="orders">Tümünü gör</button>
-        </div>
-        <div id="overview-orders" class="order-list"></div>
-      </section>
-
-      <section id="view-orders" class="portal-section" data-panel="orders" hidden>
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Takip</p>
-            <h2>Siparişlerim</h2>
+            <p class="eyebrow">Siparişlerim</p>
+            <h2>Sipariş takibi</h2>
           </div>
           <div class="segmented-control" aria-label="Sipariş filtresi">
             <button class="is-active" type="button" data-order-filter="active">Aktif</button>

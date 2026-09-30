@@ -6,7 +6,7 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    content="default-src 'none'; style-src 'self'; img-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
   >
   <title>Mağazadan Al</title>
   <meta name="description" content="Mağazadan Al müşteri hesabı ve resmi web alanı.">
@@ -28,7 +28,7 @@
       <h1 id="home-title">Sen iste, mağazadan getirelim.</h1>
       <p class="home-lead">İstediğin ürünü link, fotoğraf veya ekran görüntüsüyle yükle. Biz mağazadan alır, seçtiğin adrese teslim ederiz.</p>
       <div class="home-actions">
-        <a class="button primary-link" href="/hesabim/">Giriş yap</a>
+        <a id="home-account-link" class="button primary-link" href="/hesabim/">Giriş yap</a>
       </div>
     </section>
 
@@ -89,10 +89,23 @@
       <p>Şimdilik Şişli, Beşiktaş, Beyoğlu, Kağıthane ve Sarıyer'deyiz. Farklı bölgeler için uygulama üzerinden talep oluşturabilirsin.</p>
       <strong>Çalışma saatlerimiz: 11:00 - 21:00</strong>
     </section>
+
+    <section class="home-section app-download" aria-labelledby="app-download-title">
+      <div class="app-download-copy">
+        <p class="home-slogan">Mağazadan Al uygulaması</p>
+        <h2 id="app-download-title">iPhone için indirin</h2>
+        <p>App Store yayını başladığında uygulamayı bu alandaki QR koduyla doğrudan indirebileceksiniz.</p>
+      </div>
+      <div class="app-download-placeholder" aria-label="App Store QR kodu yayınla birlikte eklenecek">
+        <img src="/assets/brands/logo_apple.svg" alt="" width="48" height="48">
+        <span>App Store'da yakında</span>
+      </div>
+    </section>
   </main>
   <footer>
     <span>© 2026 Mağazadan Al</span>
     <a href="/privacy/">Gizlilik politikası</a>
   </footer>
+  <script src="/home.js" defer></script>
 </body>
 </html>

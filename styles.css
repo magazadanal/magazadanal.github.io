@@ -199,6 +199,33 @@ main { padding: 42px 0 64px; }
   font-size: 14px;
 }
 
+.app-download {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  gap: 32px;
+  align-items: center;
+}
+
+.app-download h2 { margin: 0; font-size: 26px; }
+.app-download p:last-child { margin: 9px 0 0; }
+
+.app-download-placeholder {
+  display: grid;
+  width: 168px;
+  aspect-ratio: 1;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 18px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.app-download-placeholder img { display: block; width: 46px; height: 46px; }
+.app-download-placeholder span { font-size: 13px; font-weight: 800; }
+
 h1 {
   margin: 0 0 12px;
   font-size: 46px;
@@ -446,27 +473,6 @@ p, li { color: var(--muted); }
 .section-heading h2 { margin: 0; font-size: 23px; }
 .section-heading .eyebrow { margin-bottom: 2px; }
 
-.metric-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  margin-bottom: 30px;
-}
-
-.metric-card {
-  display: flex;
-  min-height: 0;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
-
-.metric-card span { display: block; color: var(--muted); font-size: 14px; font-weight: 700; }
-.metric-card strong { display: block; margin: 0; font-size: 26px; line-height: 1; }
-
 .order-list,
 .data-list {
   display: grid;
@@ -648,6 +654,8 @@ p, li { color: var(--muted); }
   .home-main h1 { font-size: 32px; }
   .home-lead { font-size: 15px; }
   .home-section { padding: 28px 0; }
+  .app-download { grid-template-columns: 1fr; gap: 20px; }
+  .app-download-placeholder { width: min(168px, 100%); }
   .home-brand-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .store-brand { min-height: 68px; padding: 8px; }
   .store-brand img { height: 40px; }
@@ -656,10 +664,6 @@ p, li { color: var(--muted); }
   .portal-toolbar { align-items: flex-start; }
   .portal-title { font-size: 25px; }
   .compact-button { padding-inline: 9px; font-size: 13px; }
-  .metric-grid { gap: 8px; }
-  .metric-card { padding: 13px; }
-  .metric-card span { font-size: 12px; }
-  .metric-card strong { font-size: 24px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
   .view-link { padding-left: 0; }
   .order-card-heading { gap: 9px; }
