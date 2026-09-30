@@ -1,4 +1,4 @@
-Contact: mailto:barlas.balaman@gmail.com
+Contact: mailto:destek@magazadanal.com
 Expires: 2027-09-29T00:00:00.000Z
 Preferred-Languages: tr, en
 Canonical: https://magazadanal.com/.well-known/security.txt
