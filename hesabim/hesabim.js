@@ -490,10 +490,26 @@
     showStatus(elements.authStatus, "Oturumun sona erdi. Lütfen yeniden giriş yap.", "error");
   }
 
-  async function signIn(email, password) {
-    const data = await api("/auth/v1/token?grant_type=password", {
+  function normalizePhone(value) {
+    const trimmed = String(value || "").trim();
+    const hasInternationalPrefix = trimmed.startsWith("+") || trimmed.startsWith("00");
+    let digits = trimmed.replace(/\D/g, "");
+    if (trimmed.startsWith("00")) digits = digits.slice(2);
+    if (!hasInternationalPrefix && digits.length === 11 && digits.startsWith("0")) {
+      digits = `90${digits.slice(1)}`;
+    } else if (!hasInternationalPrefix && digits.length === 10) {
+      digits = `90${digits}`;
+    }
+    return digits.length >= 7 && digits.length <= 15 ? `+${digits}` : null;
+  }
+
+  async function signIn(identifier, password) {
+    const isEmail = identifier.includes("@");
+    const data = await api(isEmail
+      ? "/auth/v1/token?grant_type=password"
+      : "/functions/v1/phone-password-login", {
       method: "POST",
-      body: { email, password },
+      body: isEmail ? { email: identifier, password } : { phone: normalizePhone(identifier), password },
       token: null
     });
     const session = sessionFromResponse(data);
@@ -536,17 +552,20 @@
 
   elements.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const email = elements.email.value.trim().toLowerCase();
+    const identifier = elements.email.value.trim().toLowerCase();
     const password = elements.password.value;
-    if (!email.includes("@") || password.length < 6) {
-      showStatus(elements.authStatus, "Mail adresini ve şifreni kontrol et.", "error");
+    const identifierIsValid = identifier.includes("@")
+      ? identifier.includes(".")
+      : normalizePhone(identifier) !== null;
+    if (!identifierIsValid || password.length < 6) {
+      showStatus(elements.authStatus, "E-posta/telefon ve şifreni kontrol et.", "error");
       return;
     }
 
     setAuthBusy(true);
     hideStatus(elements.authStatus);
     try {
-      await signIn(email, password);
+      await signIn(identifier, password);
       elements.password.value = "";
       elements.showPassword.checked = false;
       elements.password.type = "password";
@@ -554,7 +573,7 @@
       await loadPortal();
     } catch {
       saveSession(null);
-      showStatus(elements.authStatus, "Mail adresi veya şifre hatalı.", "error");
+      showStatus(elements.authStatus, "E-posta/telefon veya şifre hatalı.", "error");
     } finally {
       setAuthBusy(false);
     }
@@ -567,7 +586,7 @@
   elements.forgotPasswordButton.addEventListener("click", async () => {
     const email = elements.email.value.trim().toLowerCase();
     if (!email.includes("@")) {
-      showStatus(elements.authStatus, "Önce mail adresini yaz.", "error");
+      showStatus(elements.authStatus, "Parola yenilemek için e-posta adresini yaz.", "error");
       elements.email.focus();
       return;
     }
