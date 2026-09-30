@@ -58,7 +58,10 @@ body {
 
 .theme-toggle:hover { border-color: var(--teal); }
 .theme-toggle:focus-visible { outline: 3px solid color-mix(in srgb, var(--teal) 45%, transparent); outline-offset: 2px; }
-:root[data-theme="dark"] .brand-logo { filter: brightness(0) invert(1); }
+:root[data-theme="dark"] .brand-logo {
+  filter: invert(1) hue-rotate(170deg);
+  mix-blend-mode: screen;
+}
 
 header {
   border-bottom: 1px solid var(--line);
