@@ -547,6 +547,11 @@ p, li { color: var(--muted); }
 }
 
 footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 24px 0 40px;
   border-top: 1px solid var(--line);
   color: var(--muted);
