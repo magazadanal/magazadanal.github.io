@@ -77,11 +77,126 @@ nav a, footer a { color: var(--teal); font-weight: 650; }
 main { padding: 42px 0 64px; }
 
 .home-main {
-  display: flex;
-  min-height: 54vh;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
+  width: min(760px, calc(100% - 36px));
+  min-height: 0;
+  padding: 24px 0 56px;
+}
+
+.home-intro {
+  max-width: 650px;
+  margin: 0 auto;
+  padding: 24px 0 40px;
+  text-align: center;
+}
+
+.home-slogan {
+  margin: 0 0 8px;
+  color: var(--teal);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.home-main h1 {
+  margin-bottom: 14px;
+  font-size: 44px;
+}
+
+.home-lead {
+  max-width: 610px;
+  margin: 0 auto;
+  font-size: 17px;
+}
+
+.home-section {
+  padding: 36px 0;
+  border-top: 1px solid var(--line);
+}
+
+.home-section-heading {
+  margin-bottom: 20px;
+}
+
+.home-section-heading h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.home-section-heading p {
+  margin: 5px 0 0;
+}
+
+.home-brand-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.store-brand {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  place-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.store-brand img {
+  display: block;
+  width: 100%;
+  height: 48px;
+  object-fit: contain;
+}
+
+.home-brand-note {
+  margin: 14px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.home-flow {
+  border-top: 1px solid var(--line);
+}
+
+.home-step {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.home-step-number {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e7f3f0;
+  color: var(--teal);
+  font-weight: 800;
+}
+
+.home-step h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.home-step p {
+  margin: 2px 0 0;
+}
+
+.home-service p {
+  margin: 0 0 12px;
+}
+
+.home-service strong {
+  font-size: 14px;
 }
 
 h1 {
@@ -123,10 +238,8 @@ p, li { color: var(--muted); }
 }
 
 .home-actions {
-  display: flex;
   width: min(320px, 100%);
-  flex-direction: column;
-  gap: 10px;
+  margin: 24px auto 0;
 }
 
 .home-actions .button {
@@ -530,6 +643,14 @@ p, li { color: var(--muted); }
   h1 { font-size: 32px; }
   .bar { padding-top: 8px; }
   .brand { width: 160px; height: 100px; }
+  .home-main { width: min(100% - 28px, 760px); padding-top: 16px; }
+  .home-intro { padding: 18px 0 30px; }
+  .home-main h1 { font-size: 32px; }
+  .home-lead { font-size: 15px; }
+  .home-section { padding: 28px 0; }
+  .home-brand-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .store-brand { min-height: 68px; padding: 8px; }
+  .store-brand img { height: 40px; }
   .portal-page { width: min(100% - 24px, 680px); padding-top: 22px; }
   .auth-shell { padding: 20px; }
   .portal-toolbar { align-items: flex-start; }
