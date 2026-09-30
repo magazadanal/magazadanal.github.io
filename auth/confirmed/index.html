@@ -6,13 +6,14 @@
   <meta name="referrer" content="no-referrer">
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    content="default-src 'none'; connect-src https://zxqqbzggfbxoasyhueqb.supabase.co; style-src 'self'; img-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
   >
   <title>E-posta doğrulama · Mağazadan Al</title>
   <meta name="robots" content="noindex, nofollow, noarchive">
   <link rel="icon" type="image/png" href="/assets/magazadanal-logo.png">
   <link rel="apple-touch-icon" href="/assets/magazadanal-logo.png">
   <link rel="stylesheet" href="/styles.css">
+  <script src="/theme.js"></script>
 </head>
 <body>
   <header>
@@ -22,13 +23,16 @@
       </a>
     </div>
   </header>
-  <main>
+  <main class="auth-page">
+    <p class="eyebrow">Hesap güvenliği</p>
     <h1>E-posta doğrulama</h1>
-    <div class="status">
-      <strong>Bağlantı uygulamada açılmalıdır.</strong>
-      <p>Mağazadan Al yüklüyse bağlantıya iPhone veya iPad'inizden yeniden dokunun. Uygulama yüklü değilse doğrulama işlemi tamamlandıktan sonra uygulamadan giriş yapabilirsiniz.</p>
+    <div id="confirmation-status" class="status" role="status" aria-live="polite">
+      <strong>E-posta adresin doğrulanıyor...</strong>
+      <p>Bu işlem birkaç saniye sürebilir.</p>
     </div>
+    <a id="account-link" class="button primary-link" href="/hesabim/" hidden>Giriş yap</a>
   </main>
   <footer><a href="/privacy/">Gizlilik politikası</a></footer>
+  <script src="/auth/confirmed/confirmed.js" defer></script>
 </body>
 </html>
