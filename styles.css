@@ -325,6 +325,38 @@ p, li { color: var(--muted); }
   text-align: center;
 }
 
+.support-public {
+  max-width: 620px;
+}
+
+.support-lead {
+  max-width: 560px;
+  margin-bottom: 30px;
+  font-size: 17px;
+}
+
+.support-channel {
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+}
+
+.support-channel:last-of-type {
+  border-bottom: 1px solid var(--line);
+}
+
+.support-channel h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.support-channel p {
+  margin: 0;
+}
+
+.support-channel .button {
+  border-radius: 6px;
+}
+
 .auth-page { max-width: 560px; }
 
 .eyebrow {
