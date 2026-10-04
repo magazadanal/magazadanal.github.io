@@ -52,7 +52,11 @@
     activities: [],
     supportTickets: [],
     orderFilter: "active",
-    refreshTimer: null
+    refreshTimer: null,
+    runtimeStatusTimer: null,
+    runtimeCheckInFlight: false,
+    webAccountEnabled: true,
+    maintenanceMessage: "Müşteri web hesabı güvenlik kontrolü nedeniyle geçici olarak kapalı."
   };
 
   const elements = {
@@ -194,11 +198,58 @@
 
   function setAuthBusy(busy) {
     elements.email.disabled = busy;
-    elements.password.disabled = busy;
-    elements.showPassword.disabled = busy;
-    elements.loginButton.disabled = busy;
+    elements.password.disabled = busy || !state.webAccountEnabled;
+    elements.showPassword.disabled = busy || !state.webAccountEnabled;
+    elements.loginButton.disabled = busy || !state.webAccountEnabled;
     elements.forgotPasswordButton.disabled = busy;
     elements.loginButton.textContent = busy ? "Kontrol ediliyor..." : "Giriş yap";
+  }
+
+  async function fetchRuntimeStatus() {
+    const rows = await api("/rest/v1/rpc/get_public_runtime_status", {
+      method: "POST",
+      body: {},
+      token: null
+    });
+    const status = Array.isArray(rows) ? rows[0] : null;
+    if (!status) throw new APIError(503);
+    state.webAccountEnabled = status.customer_web_account_enabled !== false;
+    state.maintenanceMessage = status.maintenance_message || state.maintenanceMessage;
+    setAuthBusy(false);
+    return state.webAccountEnabled;
+  }
+
+  function showWebMaintenance() {
+    saveSession(null);
+    clearPortalData();
+    setPortalVisible(false);
+    showStatus(elements.authStatus, state.maintenanceMessage, "error");
+  }
+
+  async function enforceRuntimeStatus() {
+    if (state.runtimeCheckInFlight) return state.webAccountEnabled;
+    state.runtimeCheckInFlight = true;
+    try {
+      if (!await fetchRuntimeStatus()) {
+        showWebMaintenance();
+        return false;
+      }
+      return true;
+    } catch {
+      state.webAccountEnabled = false;
+      state.maintenanceMessage = "Müşteri web hesabının güvenlik durumu doğrulanamadı. Lütfen biraz sonra tekrar deneyin.";
+      showWebMaintenance();
+      return false;
+    } finally {
+      state.runtimeCheckInFlight = false;
+    }
+  }
+
+  function startRuntimeStatusMonitor() {
+    if (state.runtimeStatusTimer) window.clearInterval(state.runtimeStatusTimer);
+    state.runtimeStatusTimer = window.setInterval(() => {
+      void enforceRuntimeStatus();
+    }, 30_000);
   }
 
   function setPortalVisible(isVisible) {
@@ -455,6 +506,7 @@
 
   async function loadPortal({ quiet = false } = {}) {
     if (!state.session) return;
+    if (!await enforceRuntimeStatus()) return;
     if (!quiet) elements.loading.hidden = false;
     elements.refreshButton.disabled = true;
     hideStatus(elements.portalStatus);
@@ -504,6 +556,7 @@
   }
 
   async function signIn(identifier, password) {
+    if (!await enforceRuntimeStatus()) throw new APIError(503);
     const isEmail = identifier.includes("@");
     const data = await api(isEmail
       ? "/auth/v1/token?grant_type=password"
@@ -571,9 +624,13 @@
       elements.password.type = "password";
       setPortalVisible(true);
       await loadPortal();
-    } catch {
+    } catch (error) {
       saveSession(null);
-      showStatus(elements.authStatus, "E-posta/telefon veya şifre hatalı.", "error");
+      if (!state.webAccountEnabled) {
+        showWebMaintenance();
+      } else {
+        showStatus(elements.authStatus, "E-posta/telefon veya şifre hatalı.", "error");
+      }
     } finally {
       setAuthBusy(false);
     }
@@ -667,6 +724,9 @@
   });
 
   async function bootstrap() {
+    if (!await enforceRuntimeStatus()) return;
+    startRuntimeStatusMonitor();
+
     const stored = readStoredSession();
     if (!stored) {
       setPortalVisible(false);
