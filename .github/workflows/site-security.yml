@@ -1,0 +1,31 @@
+name: Site security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-security:
+    name: Static security checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify critical files
+        run: |
+          test -f CNAME
+          test -f .well-known/security.txt
+          test -f .well-known/apple-app-site-association
+          test -f _headers
+      - name: Check JavaScript syntax
+        run: find . -type f -name '*.js' -not -path './.git/*' -print0 | xargs -0 -n1 node --check
+      - name: Reject privileged credentials
+        run: |
+          if grep -RInE --exclude-dir=.git --include='*.js' --include='*.html' --include='*.json' '(service_role|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)' .; then
+            echo 'Privileged credential pattern detected.' >&2
+            exit 1
+          fi
