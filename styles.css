@@ -86,7 +86,7 @@ header {
 .brand {
   display: block;
   width: 190px;
-  height: 127px;
+  height: 57px;
   text-decoration: none;
 }
 
@@ -768,4 +768,13 @@ footer {
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 14px;
+}
+
+.brand-attribution {
+  margin-left: 6px;
+  color: var(--teal);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
