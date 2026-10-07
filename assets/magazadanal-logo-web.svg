@@ -1,26 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="270" viewBox="0 0 900 270" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="603" viewBox="0 0 900 603" role="img" aria-labelledby="title desc">
   <title id="title">Mağazadan Al</title>
-  <desc id="desc">Mağazadan Al yazısı ve turkuaz teslim simgesi</desc>
+  <desc id="desc">Mağazadan yazısı, altında Al yazısı ve turkuaz teslim simgesi</desc>
   <style>
     .wordmark {
       fill: #101112;
       font-family: -apple-system, BlinkMacSystemFont, "Avenir Next", "Helvetica Neue", Arial, sans-serif;
-      font-size: 112px;
       font-weight: 400;
       letter-spacing: 0;
       text-anchor: middle;
     }
     .symbol {
       fill: none;
-      stroke: #2e7068;
-      stroke-width: 15;
+      stroke: url(#symbol-gradient);
+      stroke-width: 34;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
   </style>
-  <text class="wordmark" x="450" y="122">MAĞAZADAN AL</text>
-  <path class="symbol" d="M375 184 V159 H432 L458 181"/>
-  <path class="symbol" d="M525 198 V223 H468 L442 201"/>
-  <rect x="442" y="182" width="16" height="16" rx="2" fill="#101112"/>
+  <defs>
+    <linearGradient id="symbol-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00a9ad"/>
+      <stop offset="1" stop-color="#16b9c2"/>
+    </linearGradient>
+  </defs>
+  <text class="wordmark" x="450" y="142" font-size="112">MAĞAZADAN</text>
+  <text class="wordmark" x="450" y="352" font-size="214">AL</text>
+  <path class="symbol" d="M340 448 V410 H421 L476 456"/>
+  <path class="symbol" d="M560 493 V531 H479 L424 485"/>
+  <rect x="426" y="448" width="48" height="48" rx="3" fill="#101112"/>
 </svg>
