@@ -24,7 +24,37 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "theme-toggle";
-    button.textContent = "💡";
+
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("aria-hidden", "true");
+    icon.classList.add("theme-toggle-icon");
+
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", "12");
+    circle.setAttribute("cy", "12");
+    circle.setAttribute("r", "4");
+    icon.append(circle);
+
+    for (const [x1, y1, x2, y2] of [
+      [12, 2, 12, 4],
+      [12, 20, 12, 22],
+      [4.93, 4.93, 6.34, 6.34],
+      [17.66, 17.66, 19.07, 19.07],
+      [2, 12, 4, 12],
+      [20, 12, 22, 12],
+      [4.93, 19.07, 6.34, 17.66],
+      [17.66, 6.34, 19.07, 4.93],
+    ]) {
+      const ray = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      ray.setAttribute("x1", String(x1));
+      ray.setAttribute("y1", String(y1));
+      ray.setAttribute("x2", String(x2));
+      ray.setAttribute("y2", String(y2));
+      icon.append(ray);
+    }
+
+    button.append(icon);
 
     function updateLabel() {
       const dark = root.dataset.theme === "dark";
