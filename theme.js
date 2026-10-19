@@ -76,7 +76,8 @@
     });
 
     updateLabel();
-    document.body.append(button);
+    const headerActions = document.querySelector(".header-actions");
+    (headerActions || document.body).append(button);
   }
 
   applyTheme(preferredTheme());
