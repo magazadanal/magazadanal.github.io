@@ -23,8 +23,8 @@ jobs:
           test -f _headers
       - name: Check JavaScript syntax
         run: find . -type f -name '*.js' -not -path './.git/*' -print0 | xargs -0 -n1 node --check
-      - name: Verify app association compatibility
-        run: node --test tests/app-association.test.cjs
+      - name: Verify static runtime, contacts and app association compatibility
+        run: node --test tests/*.test.cjs
       - name: Reject privileged credentials
         run: |
           if grep -RInE --exclude-dir=.git --include='*.js' --include='*.html' --include='*.json' '(service_role|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)' .; then
