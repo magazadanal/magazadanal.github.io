@@ -14,7 +14,7 @@ async function main() {
       let writes = 0, refreshIdentity = owner, mutatedProfile = null, addressSaved = null, supportSent = null, addresses = [], deleted = false;
       let respond;
       const deferred = new Promise((resolve) => { respond = resolve; });
-      const draft = R.newDraft(); draft.items = [{ client_item_id: crypto.randomUUID(), store: "Beymen", branch: "Test", product_name: "Test", size: "M", color: "Siyah", estimated_price: 100, product_link: "https://example.com", store_latitude: 41, store_longitude: 29 }];
+      const draft = R.newDraft(); draft.express = true; draft.items = [{ client_item_id: crypto.randomUUID(), store: "Beymen", branch: "Test", product_name: "Test", size: "M", color: "Siyah", estimated_price: 100, product_link: "https://example.com", store_latitude: 41, store_longitude: 29 }];
       draft.address = { district: "Şişli", neighborhood: "Test", address_line: "Sokak", building_no: "1", building_name: "Bina", directions: "Kapı", customer_name: "Test", customer_phone: "+905301234567", latitude: 41, longitude: 29 };
       const payload = R.payload(draft, await R.documents(draft, legal, "test@example.invalid", catalog.stores));
       const data = { owner: scenario === "other-owner" ? "different-owner" : owner, updated: 0, draft, frozen: { payload, expectedAmount: 460 }, stage: "stores", checkout: true };
@@ -41,7 +41,7 @@ async function main() {
         else if (p === "/rest/v1/customer_billing_profiles") result = [{ invoice_type: "individual", company_name: "Preserved Co", identity_number: "", billing_address: "Preserved address" }];
         else if (p === "/rest/v1/customer_profile_photos") result = [{ photo_base64: "unchanged-photo" }];
         else if (p.endsWith("update_customer_profile_secure")) { mutatedProfile = body; result = "success"; }
-        else if (p.endsWith("save_customer_address")) {
+        else if (p.endsWith("save_customer_address_v2")) {
           addressSaved = body; const address = {}; for (const [key, value] of Object.entries(body)) address[key.slice(2)] = value;
           address.is_invoice = true; addresses = [address]; result = true;
         }
@@ -60,7 +60,8 @@ async function main() {
       if (scenario === "other-owner") { await page.getByText("Sepetin boş.", { exact: true }).waitFor(); }
       else if (scenario === "address-profile-support") {
         await page.locator('[data-view="profile"]').click(); await page.locator("#profile-edit").click();
-        await page.locator('[name="profile_full_name"]').fill("Updated Test");
+        await page.locator('[name="profile_first_name"]').fill("Updated");
+        await page.locator('[name="profile_last_name"]').fill("Test");
         await page.getByRole("button", { name: "Kaydet", exact: true }).click();
         await page.waitForFunction(() => !document.querySelector(".app-dialog"));
         assert.equal(mutatedProfile.p_full_name, "Updated Test"); assert.equal(mutatedProfile.p_photo_base64, "unchanged-photo");
@@ -92,6 +93,7 @@ async function main() {
         await page.getByRole("button", { name: "Aynı talebi kontrol et", exact: true }).click();
         if (scenario === "stale-result") {
           await page.waitForTimeout(100); assert.equal(writes, 1);
+          await page.locator('[data-view="profile"]').click();
           await Promise.all([page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame()), page.locator("#logout-button").click()]); await page.locator("#auth-view").waitFor(); respond();
           await page.waitForTimeout(100); assert.equal(await page.getByText("PRIVATE-OLD-ACCOUNT", { exact: true }).count(), 0);
           assert.equal(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.includes("draft.v1")).length), 0);

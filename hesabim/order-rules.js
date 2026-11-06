@@ -7,6 +7,22 @@
   const districts = ["Şişli", "Beşiktaş", "Beyoğlu", "Kağıthane", "Sarıyer"];
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const clone = (value) => JSON.parse(JSON.stringify(value));
+  function splitName(value) {
+    const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+    return { firstName: parts[0] || "", lastName: parts.slice(1).join(" ") };
+  }
+  function splitPhone(value, countries = []) {
+    const normalized = phone(value) || String(value || "").replace(/[ ()-]/g, "");
+    const codes = [...new Set(countries.map(country => country.code))].sort((a, b) => b.length - a.length);
+    const code = codes.find(code => normalized.startsWith(code)) || "+90";
+    return { code, number: normalized.startsWith(code) ? normalized.slice(code.length) : String(value || "").replace(/\D/g, "") };
+  }
+  function joinedPhone(code, number) {
+    if (!/^\+[1-9]\d{0,3}$/.test(code)) return null;
+    let national = String(number || "").replace(/[ ()-]/g, "");
+    if (code === "+90" && national.startsWith("0")) national = national.slice(1);
+    return /^\d+$/.test(national) ? phone(code + national) : null;
+  }
   function point(lat, lng) {
     return typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)
       && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
@@ -34,7 +50,7 @@
   function totals(items, express, percent = 0) {
     const products = items.reduce((sum, item) => sum + Number(item.estimated_price), 0);
     const stores = new Set(items.map((item) => item.store.trim())).size;
-    const service = items.length ? (express ? 360 : 288) + Math.max(0, stores - 1) * 70 + Math.max(0, items.length - 1) * 36 : 0;
+    const service = items.length && typeof express === "boolean" ? (express ? 360 : 288) + Math.max(0, stores - 1) * 70 + Math.max(0, items.length - 1) * 36 : 0;
     const discount = Math.floor(service * Math.min(100, Math.max(0, percent)) / 100 + 0.5);
     return { products, service, discount, total: products + service - discount, stores };
   }
@@ -78,6 +94,7 @@
       if (!String(a[key] || "").trim() || a[key].length > 500) throw Error("Teslimat adresindeki tüm alanları tamamla.");
     }
     if (!phone(a.customer_phone)) throw Error("Geçerli bir cep telefonu gir.");
+    if (a.customer_name.trim().length < 2 || a.customer_name.trim().length > 100) throw Error("Alıcı ad soyadını kontrol et.");
     if (!point(a.latitude, a.longitude)) throw Error("Teslimat konumunu haritadan seç.");
     return true;
   }
@@ -90,11 +107,12 @@
   }
   async function documents(draft, catalog, email, stores) {
     validate(draft, stores);
+    if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const t = totals(draft.items, draft.express, draft.promotion?.percent || 0);
     const values = {
       REQUEST_ID: draft.requestID, CREATED_AT: draft.createdAt,
-      CUSTOMER_NAME: draft.address.customer_name, CUSTOMER_EMAIL: email,
-      CUSTOMER_PHONE: draft.address.customer_phone, DELIVERY_ADDRESS: addressSummary(draft.address),
+      CUSTOMER_NAME: draft.buyer?.full_name || draft.address.customer_name, CUSTOMER_EMAIL: email,
+      CUSTOMER_PHONE: draft.buyer?.phone || draft.address.customer_phone, DELIVERY_ADDRESS: addressSummary(draft.address),
       PRODUCT_LINES: draft.items.map((item, i) => `${i + 1}. ${item.store} / ${item.product_name}: ${item.estimated_price} TL`).join("\n"),
       STORE_NAMES: [...new Set(draft.items.map((item) => item.store))].join(", "),
       PRODUCT_TOTAL: String(t.products), SERVICE_TOTAL: String(t.service), DISCOUNT: String(t.discount), GRAND_TOTAL: String(t.total),
@@ -110,6 +128,7 @@
     }));
   }
   function payload(draft, docs) {
+    if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const address = clone(draft.address);
     address.summary = addressSummary(address);
     address.is_different_region = false;
@@ -119,7 +138,7 @@
       legal_acceptances: clone(docs), p_promotion_code: draft.promotion?.code || null };
   }
   function newDraft() {
-    return { requestID: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(), items: [], selectedStores: [], multiStore: false, address: {}, express: true, promotion: null };
+    return { requestID: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(), items: [], selectedStores: [], multiStore: false, address: {}, express: null, payment: null, selectionVersion: 1, promotion: null };
   }
   function result(row, expectedAmount) {
     if (row?.authorized !== true || !["success", "already_created"].includes(row.result) || !UUID.test(row.order_id || "")
@@ -128,5 +147,5 @@
     }
     return { ...row, amountChanged: Math.abs(row.amount - expectedAmount) > 0.005 };
   }
-  return { districts, UUID, clone, point, link, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, result };
+  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, result };
 });
