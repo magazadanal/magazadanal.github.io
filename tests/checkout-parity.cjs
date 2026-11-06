@@ -45,6 +45,7 @@ async function main() {
       await page.goto(base + "/hesabim/", { waitUntil: "domcontentloaded" });
       assert.equal(await page.locator("#auth-view").isVisible(), false, "Restoring a valid session never flashes the login form");
       await page.locator("#portal-view").waitFor();
+      assert.equal(await page.locator('#welcome-title, .portal-toolbar').count(), 0);
       assert.ok(await page.locator('[data-panel="shop"]').isVisible());
       assert.equal(calls.filter(c => c.path === "/auth/v1/token").length, 0, "Valid access tokens are not needlessly rotated");
       assert.equal(await page.locator("#last-updated").count(), 0);
@@ -81,6 +82,9 @@ async function main() {
       await page.locator('[data-view="shop"]').click();
       await page.getByRole("button", { name: "Beymen", exact: true }).click();
       await page.locator('[name="product_link"]').waitFor();
+      assert.equal(await page.locator('.product-photo-preview img').count(), 0);
+      assert.ok(await page.locator('[name="branch"]').isVisible());
+      assert.equal(await page.locator('details').filter({hasText:'Bu şubeden al'}).count(), 0);
       await page.getByRole("button", { name: "Yapıştır", exact: true }).click();
       assert.equal(await page.locator('[name="product_link"]').inputValue(), "https://example.invalid/product");
       await page.locator('[name="product_photo"]').setInputFiles(path.join(__dirname, "../assets/magazadanal-logo.png"));

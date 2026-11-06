@@ -8,10 +8,13 @@
 .product-photo-frame { position: relative; width: min(280px, 100%); aspect-ratio: 1; margin: 12px auto; }
 .product-photo-preview { display: grid; place-items: center; width: 100%; height: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; }
 .product-photo-preview img:not(.app-icon) { width: 100%; height: 100%; object-fit: contain; }
+.product-photo-preview:disabled { opacity: 1; cursor: default; }
 .product-photo-remove { position: absolute; top: 6px; right: 6px; }
+.store-pickup { padding: 14px 0; border-block: 1px solid var(--line); }
+.order-app .store-pickup h3 { margin: 0 0 12px; }
 .link-field { position: relative; }
 .link-field > label { font-size: 14px; font-weight: 600; }
-.link-field input { padding-right: 95px; }
+.app-field.link-field input { padding-right: 95px; }
 .link-field .paste-link { position: absolute; right: 10px; bottom: 6px; min-height: 36px; }
 .map-search-form { display: flex; align-items: end; gap: 12px; }
 .map-search-form .app-field { flex: 1; }

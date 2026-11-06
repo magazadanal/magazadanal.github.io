@@ -77,7 +77,6 @@
     authStatus: document.getElementById("auth-status"),
     portalStatus: document.getElementById("portal-status"),
     loading: document.getElementById("portal-loading"),
-    welcomeTitle: document.getElementById("welcome-title"),
     logoutButton: document.getElementById("logout-button"),
     ordersList: document.getElementById("orders-list"),
     historyList: document.getElementById("history-list"),
@@ -314,7 +313,6 @@
     locationControllers.clear();
     state.activities = [];
     state.supportTickets = [];
-    elements.welcomeTitle.textContent = "Hesabım";
     elements.ordersList.replaceChildren();
     delete elements.ordersList.dataset.signature;
     elements.historyList.replaceChildren();
@@ -667,8 +665,6 @@
   }
 
   function renderProfile() {
-    const name = state.profile?.full_name || "Müşteri";
-    elements.welcomeTitle.textContent = `Merhaba, ${name.split(" ")[0]}`;
     const parts = MAOrderRules.splitName(state.profile?.full_name);
     elements.profileName.textContent = parts.firstName || "-";
     elements.profileSurname.textContent = parts.lastName || "-";

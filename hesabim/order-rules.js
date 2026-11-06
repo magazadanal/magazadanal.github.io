@@ -33,6 +33,16 @@
       return value.length <= 2048 && ["https:", "http:"].includes(u.protocol) && !!u.hostname && !u.username && !u.password;
     } catch { return false; }
   }
+  function clipboardLink(text) {
+    if (typeof text !== "string" || text.length > 8192) return null;
+    const value = text.trim();
+    const candidates = /\s/.test(value) ? (value.match(/(?:https?:\/\/|www\.)[^\s<>"']+/gi) || []) : [value];
+    for (const candidate of candidates) {
+      const url = /^www\./i.test(candidate) ? `https://${candidate}` : candidate;
+      if (link(url)) return new URL(url).href;
+    }
+    return null;
+  }
   function phone(value) {
     let s = String(value || "").replace(/[ ()-]/g, "");
     if (/^05\d{9}$/.test(s)) s = `+90${s.slice(1)}`;
@@ -147,5 +157,5 @@
     }
     return { ...row, amountChanged: Math.abs(row.amount - expectedAmount) > 0.005 };
   }
-  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, result };
+  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, result };
 });
