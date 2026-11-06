@@ -60,7 +60,7 @@ async function main() {
       assert.equal(await page.getByLabel("Ürün bağlantısı", { exact: true }).count(), 0);
       assert.equal(await page.getByLabel("Ürün linki", { exact: true }).count(), 1);
       assert.equal(await page.getByLabel("Sipariş notu", { exact: true }).count(), 1);
-      assert.ok(await page.locator('[name="product_link"]').evaluate(n => n.parentElement.nextElementSibling.matches("details") && n.parentElement.nextElementSibling.querySelector("summary").textContent === "Bu şubeden al"));
+      assert.ok(await page.locator('[name="product_link"]').evaluate(n => n.parentElement.nextElementSibling.matches("section.store-pickup") && n.parentElement.nextElementSibling.querySelector("h3").textContent === "Bu şubeden al"));
       assert.ok(await page.locator('[name="estimated_price"]').evaluate(n => n.parentElement.nextElementSibling.querySelector('[name="order_note"]') !== null));
       async function fillProduct(note) {
         await page.locator('[name="product_link"]').fill("https://example.com/product");

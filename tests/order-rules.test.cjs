@@ -117,3 +117,10 @@ test("client stays fixed-origin, no privileged credential or direct order writes
   assert.ok(!account.includes('innerHTML'));
   assert.ok(!/card_number|cvv|merchant_password/i.test(flow));
 });
+test('clipboard links accept shared text and www but reject unsafe or excessive content', () => {
+  assert.equal(R.clipboardLink('  https://www.beymen.com/product  '), 'https://www.beymen.com/product');
+  assert.equal(R.clipboardLink('Ürüne bak\nhttps://www.beymen.com/product'), 'https://www.beymen.com/product');
+  assert.equal(R.clipboardLink('https://www.beymen.com/product Ürüne bak'), 'https://www.beymen.com/product');
+  assert.equal(R.clipboardLink('www.beymen.com/product'), 'https://www.beymen.com/product');
+  for (const value of ['', null, 'javascript:alert(1)', 'https://user:password@example.com', 'x'.repeat(8193)]) assert.equal(R.clipboardLink(value), null);
+});

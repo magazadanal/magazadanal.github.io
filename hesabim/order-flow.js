@@ -158,8 +158,21 @@
     const cartPanel = document.getElementById("cart-flow");
     const notice = document.getElementById("order-status");
     const back = document.getElementById("product-back");
-    back.addEventListener("click", () => { if (busy || frozen) return; stage = "stores"; save(); storePage(); });
-    function showBack() { back.hidden = currentView !== "shop" || stage !== "product"; document.body.classList.toggle("has-product-back", !back.hidden); }
+    back.addEventListener("click", () => {
+      if (busy) return;
+      message("");
+      if (frozen) {
+        if (frozen.result?.order_id) void host.showOrder(frozen.result.order_id);
+        else host.openView("orders");
+      } else if (currentView === "cart") {
+        if (checkout) { checkout = false; save(); cartPage(); }
+        else { stage = "stores"; save(); host.openView("shop"); }
+      } else if (stage === "product" || draft.customStoreVisible) {
+        stage = "stores"; draft.customStoreVisible = false; save(); storePage();
+      } else host.openView("home");
+      window.scrollTo(0, 0);
+    });
+    function showBack() { back.hidden = !["shop", "cart"].includes(currentView); back.disabled = busy; document.body.classList.toggle("has-product-back", !back.hidden); }
     function phoneField(parent, label, key, value, onChange) {
       const parts = R.splitPhone(value, countries), group = el("div", undefined, "phone-field"); parent.append(group);
       const codes = [...new Map(countries.map(country => [country.code, country])).values()];
@@ -273,7 +286,7 @@
       const preview = button("", () => editing.image_data_base64 && showPhoto(editing.image_data_base64), "product-photo-preview"); preview.setAttribute("aria-label", "Ürün fotoğrafını büyüt");
       const removePhoto = button("", () => { editing.image_data_base64 = null; photo.value = ""; mutate(); refreshPhoto(); }, "app-close product-photo-remove"); removePhoto.append(icon("close")); removePhoto.setAttribute("aria-label", "Fotoğrafı kaldır"); removePhoto.title = "Fotoğrafı kaldır";
       const refreshPhoto = () => {
-        preview.replaceChildren(icon("image"));
+        preview.replaceChildren();
         if (editing.image_data_base64) { const img = el("img"); img.src = `data:image/jpeg;base64,${editing.image_data_base64}`; img.alt = "Seçilen ürün fotoğrafını büyüt"; preview.replaceChildren(img); }
         preview.disabled = !editing.image_data_base64; removePhoto.hidden = !editing.image_data_base64;
       };
@@ -288,14 +301,48 @@
       inputs.product_link = field(form, "Ürün linki", "product_link", editing.product_link, "url", { max: 2048, required: false });
       const paste = button("Yapıştır", async () => {
         const version = epoch, target = editing;
-        try { const value = (await navigator.clipboard.readText()).trim(); if (version !== epoch || editing !== target) return; if (!R.link(value)) throw Error("Panodaki geçerli bir ürün linki değil."); inputs.product_link.value = value; editing.product_link = value; mutate(); }
-        catch (error) { message(error.message?.startsWith("Panodaki") ? error.message : "Panoya erişilemedi. Linki kutuya elle yapıştırabilirsin."); }
+        const current = () => version === epoch && editing === target && currentView === "shop" && inputs.product_link.isConnected;
+        const apply = text => {
+          if (!current()) return false;
+          const value = R.clipboardLink(text);
+          if (!value) throw Error("Geçerli bir ürün linki bulunamadı.");
+          message(""); inputs.product_link.value = value; editing.product_link = value; mutate();
+          return true;
+        };
+        const manualPaste = () => {
+          if (!current()) return;
+          const view = modal("Ürün linki yapıştır");
+          const input = field(view.body, "Ürün linki", "clipboard_product_link", "", "url", { max: 8192 });
+          const feedback = el("div"); feedback.setAttribute("role", "status"); view.body.append(feedback);
+          const finish = text => {
+            try { apply(text); view.dialog.close(); }
+            catch (error) { status(feedback, error.message, true); }
+          };
+          input.addEventListener("paste", event => {
+            const value = R.clipboardLink(event.clipboardData?.getData("text/plain"));
+            if (value) { event.preventDefault(); finish(value); }
+          });
+          input.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); finish(input.value); } });
+          view.footer.append(button("Kullan", () => finish(input.value), "button primary-button"));
+          input.focus();
+        };
+        paste.disabled = true;
+        try {
+          let value;
+          try {
+            if (!navigator.clipboard?.readText) { manualPaste(); return; }
+            value = await navigator.clipboard.readText();
+          } catch { manualPaste(); return; }
+          apply(value);
+        } catch (error) { if (current()) message(error.message); }
+        finally { paste.disabled = false; }
       }, "text-button paste-link");
       const oldLinkField = inputs.product_link.parentElement;
       const linkField = el("div", undefined, "app-field link-field"), linkLabel = el("label", "Ürün linki");
       inputs.product_link.id = "order-product-link"; linkLabel.htmlFor = inputs.product_link.id;
       oldLinkField.replaceWith(linkField); linkField.append(linkLabel, inputs.product_link, paste);
-      const branch = el("details", undefined, "app-disclosure"); const summary = el("summary", "Bu şubeden al"); branch.append(summary);
+      const branch = el("section", undefined, "store-pickup"); const branchTitle = el("h3", "Bu şubeden al");
+      branchTitle.id = "store-pickup-title"; branch.setAttribute("aria-labelledby", branchTitle.id); branch.append(branchTitle);
       inputs.branch = field(branch, "Mağaza şubesi", "branch", editing.branch, "text", { max: 200 });
       const storeName = editing.store;
       const locationButton = button("", () => choosePoint({ latitude: editing.store_latitude, longitude: editing.store_longitude }, (p) => {
@@ -347,6 +394,7 @@
       label(); parent.append(locationButton);
     }
     function cartPage() {
+      showBack();
       formBase(cartPanel, checkout ? "Teslimat ve ödeme" : "Sepetim");
       if (!draft.items.length && !frozen) {
         cartPanel.append(el("p", "Sepetin boş.", "empty-state"), button("Ürün ekle", () => host.openView("shop"), "button primary-button")); return;
@@ -503,6 +551,7 @@
       if (busy || frozen) return;
       const version = epoch;
       busy = true;
+      showBack();
       productPanel.inert = true; cartPanel.inert = true;
       try {
         if (!await host.checkRuntime() || !allowed()) throw Error("Yeni sipariş alımı şu anda kapalı.");
@@ -517,7 +566,7 @@
         if (!save()) { frozen = null; throw Error("Sepet bu sekmeye sığmadığı için sipariş gönderilmedi. Fotoğrafları azaltıp yeniden dene."); }
         cartPage(); await sendFrozen(version);
       } catch (e) { message(e.message || "Sipariş gönderilemedi."); }
-      finally { busy = false; productPanel.inert = false; cartPanel.inert = false; }
+      finally { busy = false; productPanel.inert = false; cartPanel.inert = false; showBack(); }
     }
     function pendingPage() {
       if (frozen.result) {
@@ -534,8 +583,8 @@
       } else {
         cartPanel.append(el("p", "Sipariş talebinin sonucu bekleniyor. Tekrar kontrol aynı talep koduyla yapılır; yeni sipariş oluşturulmaz."));
         cartPanel.append(button("Aynı talebi kontrol et", async (e) => {
-          if (busy) return; busy = true; e.currentTarget.disabled = true;
-          try { await sendFrozen(epoch); } finally { busy = false; if (e.currentTarget) e.currentTarget.disabled = false; }
+          if (busy) return; busy = true; showBack(); e.currentTarget.disabled = true;
+          try { await sendFrozen(epoch); } finally { busy = false; showBack(); if (e.currentTarget) e.currentTarget.disabled = false; }
         }, "button primary-button"));
       }
     }

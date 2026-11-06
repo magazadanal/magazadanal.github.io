@@ -57,6 +57,13 @@ async function main() {
       });
       await page.goto(base + "/hesabim/"); await page.locator("#portal-view").waitFor();
       await page.locator('[data-view="cart"]').click();
+      if (scenario !== "other-owner") {
+        await page.getByRole("button", { name: "Geri", exact: true }).click();
+        assert.ok(await page.locator('[data-panel="orders"]').isVisible());
+        assert.equal(writes, 0, "Back from an uncertain request must never resubmit it");
+        await page.locator('[data-view="cart"]').click();
+        assert.ok(await page.getByRole("button", { name: "Aynı talebi kontrol et", exact: true }).isVisible());
+      }
       if (scenario === "other-owner") { await page.getByText("Sepetin boş.", { exact: true }).waitFor(); }
       else if (scenario === "address-profile-support") {
         await page.locator('[data-view="profile"]').click(); await page.locator("#profile-edit").click();
@@ -93,6 +100,7 @@ async function main() {
         await page.getByRole("button", { name: "Aynı talebi kontrol et", exact: true }).click();
         if (scenario === "stale-result") {
           await page.waitForTimeout(100); assert.equal(writes, 1);
+          assert.ok(await page.getByRole("button", { name: "Geri", exact: true }).isDisabled());
           await page.locator('[data-view="profile"]').click();
           await Promise.all([page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame()), page.locator("#logout-button").click()]); await page.locator("#auth-view").waitFor(); respond();
           await page.waitForTimeout(100); assert.equal(await page.getByText("PRIVATE-OLD-ACCOUNT", { exact: true }).count(), 0);
