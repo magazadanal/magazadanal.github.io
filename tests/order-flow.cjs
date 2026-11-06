@@ -29,6 +29,7 @@ async function main() {
         const p = url.pathname; const body = req.postDataJSON(); calls.push({ path: p, body });
         let data;
         if (p.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
+        else if (p === "/functions/v1/web-store-search") data = { results: [] };
         else if (p === "/auth/v1/token") data = { access_token: "mock-access-token", refresh_token: "mock-refresh-token", expires_in: 3600, user: { id: owner, email: "customer@example.invalid" } };
         else if (p === "/rest/v1/profiles") data = [{ id: owner, role: "customer", full_name: "Test Müşteri", phone: "+905301234567", is_active: true }];
         else if (p === "/rest/v1/customer_addresses") data = [{ id: "30000000-0000-4000-8000-000000000001", title: "Ev", city: "İstanbul", district: "Şişli", neighborhood: "Test Mahallesi", address_line: "Test Sokak", building_no: "1", building_name: "Bina kat 1 daire 2", directions: "Kapı", latitude: 41.07, longitude: 29, is_invoice: true }];
@@ -62,7 +63,7 @@ async function main() {
       assert.equal(await page.locator('[name="product_name"], [name="alternative_size"], [name="alternative_color"]').count(), 0);
       await page.locator('[name="product_link"]').fill("https://example.com/product");
       await page.locator('[name="product_photo"]').setInputFiles(path.join(__dirname, "../assets/magazadanal-logo.png"));
-      await page.waitForFunction(() => document.querySelector('.photo-preview img')?.src.startsWith('data:image/jpeg'));
+      await page.waitForFunction(() => document.querySelector('.product-photo-preview img')?.src.startsWith('data:image/jpeg'));
       await page.locator('[name="size"]').fill("M");
       await page.locator('[name="color"]').fill("Siyah");
       await page.locator('[name="estimated_price"]').fill("100");
@@ -75,17 +76,24 @@ async function main() {
       await page.screenshot({ path: path.join(output, `product-${width}-${theme}.png`), fullPage: true });
       await page.getByRole("button", { name: "Sepete ekle", exact: true }).click();
       await page.locator('[name="saved_address"]').selectOption("30000000-0000-4000-8000-000000000001");
+      await page.locator('[name="customer_name"]').fill("Other Recipient");
+      await page.locator('[name="customer_phone_number"]').fill("5300000000");
       await page.screenshot({ path: path.join(output, `cart-${width}-${theme}.png`), fullPage: true });
       await page.getByRole("button", { name: "Ödemeye geç", exact: true }).click();
+      assert.equal(await page.locator('.choice-row input:checked').count(), 0);
+      assert.equal(await page.getByText("Promosyon indirimi", { exact: true }).count(), 0);
+      await page.locator('input[name="delivery"]').first().check();
+      await page.locator('input[name="payment"]').check();
       await page.locator('[name="promotion"]').fill("TEST10");
       await page.getByRole("button", { name: "Uygula", exact: true }).click();
       await page.getByRole("button", { name: "Kaldır", exact: true }).waitFor();
       assert.equal(await page.locator('.choice-row input:disabled').count(), 1);
-      await page.getByRole("button", { name: "Sipariş sözleşmelerini oku ve onayla", exact: true }).click();
+      await page.getByRole("button", { name: /Ön Bilgilendirme, Mesafeli Sözleşme ve İade Koşulları/ }).click();
       await page.getByRole("button", { name: "Okudum ve kabul ediyorum", exact: true }).click();
-      await page.getByText("Hizmetin cayma süresi dolmadan başlamasını açıkça talep ediyorum.", { exact: true }).click();
+      await page.locator('.legal-approval').nth(1).click();
+      await page.getByRole("button", { name: "Okudum ve kabul ediyorum", exact: true }).click();
       await page.screenshot({ path: path.join(output, `payment-${width}-${theme}.png`), fullPage: true });
-      const submit = page.getByRole("button", { name: "Sipariş oluştur · Ödeme yükümlülüğü doğurur", exact: true });
+      const submit = page.getByRole("button", { name: "Öde ve onayla", exact: true });
       await submit.click();
       await page.getByRole("dialog", { name: "Hesap sözleşmeleri" }).waitFor();
       await page.locator('.app-dialog input[type="checkbox"]').evaluateAll((nodes) => nodes.forEach((n) => n.click()));
@@ -103,6 +111,10 @@ async function main() {
       assert.equal(attempts.length, 2);
       assert.deepEqual(attempts[0], attempts[1], "Retries use identical immutable payload and request ID across reload");
       assert.equal(attempts[1].legal_acceptances.length, 4);
+      assert.equal(attempts[1].delivery_address.customer_name, "Other Recipient");
+      assert.equal(attempts[1].delivery_address.customer_phone, "+905300000000");
+      assert.ok(attempts[1].legal_acceptances.some(doc => doc.content.includes("Test Müşteri")));
+      assert.ok(!attempts[1].legal_acceptances.some(doc => doc.content.includes("Other Recipient")));
       assert.equal(attempts[1].items[0].product_name, "Ürün 1");
       assert.equal(attempts[1].items[0].alternative_size, "İstemiyorum");
       assert.equal(attempts[1].items[0].alternative_color, "İstemiyorum");
@@ -115,7 +127,7 @@ async function main() {
       if (width === 390 && theme === "light") {
         delivered = true; await page.clock.fastForward(16000);
         await page.locator("#orders-list .empty-state").waitFor();
-        assert.equal(await page.locator("#orders-list .order-card").count(), 0, "Completed orders leave the active-only tracking screen");
+        assert.equal(await page.locator("#orders-list .order-card:not(.tracking-placeholder)").count(), 0, "Completed orders leave the active-only tracking screen");
         await page.locator('[data-view="profile"]').click(); await page.locator("#profile-history").click();
         await page.locator("#view-history").waitFor();
         assert.equal(await page.locator("#history-list .status-delivered").count(), 1);
@@ -128,6 +140,7 @@ async function main() {
       assert.equal(await page.locator("#support-list img").count(), 0, "Support content is text, not HTML");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Overflow ${width}/${theme}`);
       assert.deepEqual(errors.filter((s) => !s.includes("503")), [], `Browser errors ${width}/${theme}`);
+      await page.locator('[data-view="profile"]').click();
       await Promise.all([page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame()), page.locator("#logout-button").click()]);
       await page.locator("#auth-view").waitFor();
       assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((k) => k.includes("draft.v1"))), false);

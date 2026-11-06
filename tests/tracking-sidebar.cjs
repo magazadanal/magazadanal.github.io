@@ -45,6 +45,7 @@ async function main() {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
       });
       await page.goto(base + "/hesabim/"); await page.locator("#portal-view").waitFor();
+      await page.locator('[data-view="orders"]').click();
       await page.locator("#orders-list .courier-coordinates:not([hidden])").waitFor();
       assert.equal(await page.locator('#orders-list .order-card').count(), 1);
       assert.equal(await page.locator('#orders-list .order-card[open]').count(), 1);
@@ -70,7 +71,7 @@ async function main() {
       await page.locator('[data-view="orders"]').click();
       phase = "stale"; await page.clock.fastForward(11000);
       await page.waitForFunction(() => document.querySelector('#orders-list .courier-coordinates').hidden);
-      assert.ok(await page.getByRole("button", { name: "Kurye haritasını aç", exact: true }).isDisabled());
+      assert.ok(await page.locator('#orders-list .app-map').isVisible(), "Basemap stays open while stale courier marker is removed");
       assert.equal(await page.locator("#orders-list .leaflet-overlay-pane path").count(), 0);
       phase = "fresh"; longitude = 28.991;
       await page.clock.fastForward(11000);
@@ -78,7 +79,8 @@ async function main() {
       await page.locator("#orders-list .leaflet-overlay-pane path").waitFor();
       status = "delivered"; await page.clock.fastForward(16000);
       await page.locator("#orders-list .empty-state").waitFor();
-      assert.equal(await page.locator("#orders-list .order-card").count(), 0);
+      assert.equal(await page.locator("#orders-list .order-card:not(.tracking-placeholder)").count(), 0);
+      assert.equal(await page.locator("#orders-list .tracking-placeholder .order-timeline li").count(), 4);
       assert.equal(await page.locator("#orders-list .courier-location").count(), 0);
       await page.locator('[data-view="profile"]').click(); await page.locator("#profile-history").click();
       await page.locator("#view-history").waitFor();

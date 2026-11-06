@@ -79,9 +79,10 @@
       throw Error("Fotoğraf küçültülemedi; başka bir fotoğraf seç.");
     } finally { bitmap.close(); }
   }
-  function choosePoint(initial, onChoose) {
+  const searchCache = new Map(); let nextSearchAt = 0;
+  function choosePoint(initial, onChoose, storeName = "", searchPlaces = null) {
     const view = modal("Konum seç");
-    const info = el("p", "Haritayı açtığında OpenStreetMap’e IP adresin ve görüntülenen harita alanı iletilir. Adresini ve bina numaranı ayrıca kontrol et.", "muted");
+    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Nominatim’e mağaza / şube metnini iletir." : "") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
     const start = button("Haritayı aç", () => {
       start.remove();
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
@@ -100,6 +101,39 @@
       };
       if (selected) set(...selected);
       map.on("click", (e) => set(e.latlng.lat, e.latlng.lng));
+      const searchForm = el("form", undefined, "map-search-form"); searchForm.noValidate = true;
+      searchForm.hidden = !storeName;
+      const query = field(searchForm, "Mağaza veya yer ara", "map_search", storeName, "text", { max: 120 });
+      const find = el("button", "Ara", "button compact-button"); find.type = "submit"; searchForm.append(find);
+      const results = el("div", undefined, "map-search-results"); results.setAttribute("role", "status");
+      view.body.insertBefore(searchForm, box); view.body.insertBefore(results, box);
+      let searching = false;
+      async function search() {
+        const text = query.value.trim(); if (!storeName || !text || text.length > 120 || searching) return;
+        searching = true; find.disabled = true;
+        try {
+          let rows = searchCache.get(text.toLocaleLowerCase("tr-TR"));
+          if (!rows) {
+            if (Date.now() < nextSearchAt) throw Error("Yeni arama için bir saniye bekle.");
+            nextSearchAt = Date.now() + 1100;
+            if (!searchPlaces) throw Error("Mağaza araması şu anda kullanılamıyor. Haritadan nokta seçebilirsin.");
+            let data;
+            try { data = await searchPlaces(text); }
+            catch (error) { throw Error(error.status === 429 ? "Arama şu anda yoğun. İki saniye sonra Ara düğmesiyle yeniden deneyebilirsin." : "Mağaza araması şu anda kullanılamıyor. Haritadan nokta seçebilirsin."); }
+            if (!view.dialog.isConnected) return;
+            rows = Array.isArray(data?.results) ? data.results.slice(0, 6).filter(row => row && typeof row.name === "string" && row.name.length <= 250 && R.point(row.latitude, row.longitude)) : [];
+            if (searchCache.size > 100) searchCache.clear(); searchCache.set(text.toLocaleLowerCase("tr-TR"), rows);
+          }
+          if (!view.dialog.isConnected) return;
+          results.replaceChildren();
+          if (!rows.length) results.append(el("p", "Sonuç bulunamadı. Şube adını ekleyebilir veya haritadan seçebilirsin.", "muted"));
+          for (const row of rows) results.append(button(row.name, () => { set(row.latitude, row.longitude); map.setView([row.latitude, row.longitude], 17); }, "map-search-result"));
+          if (rows.length && !selected) map.setView([rows[0].latitude, rows[0].longitude], 13);
+        } catch (error) { if (view.dialog.isConnected) results.replaceChildren(el("p", error.message || "Yer araması açılamadı; haritadan seçebilirsin.", "muted")); }
+        finally { searching = false; find.disabled = false; }
+      }
+      searchForm.addEventListener("submit", event => { event.preventDefault(); void search(); });
+      if (storeName && !selected) void search();
       const locate = button("Konumum", () => {
         if (!navigator.geolocation) return status(location, "Bu tarayıcı konumu desteklemiyor.", true);
         navigator.geolocation.getCurrentPosition((p) => {
@@ -111,17 +145,38 @@
         if (!selected) return status(location, "Önce haritadan bir nokta seç.", true);
         onChoose({ latitude: selected[0], longitude: selected[1] }); view.dialog.close();
       }, "button primary-button"));
+      requestAnimationFrame(() => map.invalidateSize());
       view.dialog.addEventListener("close", () => map.remove(), { once: true });
     }, "button primary-button");
     view.body.append(info, start);
   }
   window.createMAOrderFlow = function (host) {
-    let stores = [], legal = null, owner = null, profile = null, addresses = [], runtime = null;
+    let stores = [], countries = [], legal = null, owner = null, profile = null, addresses = [], runtime = null, currentView = "shop";
     let draft = R.newDraft(), stage = "stores", editing = null, checkout = false, frozen = null, busy = false, loaded = false, epoch = 0;
     let accepted = null, serviceAccepted = false, profileAcks = [];
     const productPanel = document.getElementById("order-flow");
     const cartPanel = document.getElementById("cart-flow");
     const notice = document.getElementById("order-status");
+    const back = document.getElementById("product-back");
+    back.addEventListener("click", () => { if (busy || frozen) return; stage = "stores"; save(); storePage(); });
+    function showBack() { back.hidden = currentView !== "shop" || stage !== "product"; document.body.classList.toggle("has-product-back", !back.hidden); }
+    function phoneField(parent, label, key, value, onChange) {
+      const parts = R.splitPhone(value, countries), group = el("div", undefined, "phone-field"); parent.append(group);
+      const codes = [...new Map(countries.map(country => [country.code, country])).values()];
+      const country = field(group, "Ülke kodu", `${key}_country`, parts.code, "select", { values: codes.map(row => ({ value: row.code, label: row.code })) });
+      const number = field(group, label, `${key}_number`, parts.number, "tel", { max: 15, autocomplete: "tel-national" });
+      const changed = () => onChange?.(R.joinedPhone(country.value, number.value) || (number.value ? country.value + number.value : ""));
+      country.addEventListener("change", changed); number.addEventListener("input", changed);
+      return { value: () => R.joinedPhone(country.value, number.value), country, number };
+    }
+    function bankDetails(parent, transferCode = null) {
+      const details = el("dl", undefined, "bank-details");
+      for (const [title, value] of [["IBAN", "TR78 0011 1000 0000 0168 3796 58"], ["Ticari unvan", "Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi"], ["Açıklama kodu", transferCode]]) {
+        const line = el("div"), text = el("dd", value || "Sipariş onaylandığında oluşturulacak"); line.append(el("dt", title), text);
+        if (value) { const copy = button("Kopyala", async () => { try { await navigator.clipboard.writeText(value); copy.textContent = "Kopyalandı"; } catch { message("Kopyalanamadı. Bilgiyi seçerek kopyalayabilirsin."); } }, "text-button"); line.append(copy); }
+        details.append(line);
+      } parent.append(details);
+    }
     const key = () => `magazadanal.web.draft.v1.${owner}`;
     const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0);
     const rpc = (name, body = {}) => host.api(`/rest/v1/rpc/${name}`, { method: "POST", body });
@@ -139,7 +194,7 @@
     function updateCartCount() {
       document.querySelectorAll("[data-cart-count]").forEach((n) => { n.textContent = draft.items.length ? ` (${draft.items.length})` : ""; });
     }
-    function message(text, error = true) { status(notice, text, error); }
+    function message(text, error = true) { status(notice, text, error); if (text) requestAnimationFrame(() => notice.scrollIntoView({ block: "nearest", behavior: "smooth" })); }
     function formBase(parent, title) {
       parent.replaceChildren(el("h2", title));
     }
@@ -157,6 +212,7 @@
       stage = "product"; draft.editing = editing; mutate(); productPage();
     }
     function storePage() {
+      stage = "stores"; showBack();
       formBase(productPanel, "Hangi mağazadan alalım?");
       if (draft.customStoreVisible) {
         const custom = el("form", undefined, "custom-store-form"); custom.noValidate = true;
@@ -208,19 +264,20 @@
     }
     function productPage() {
       formBase(productPanel, editing.store);
-      const back = button("", () => { stage = "stores"; save(); storePage(); }, "product-back");
-      back.append(icon("chevron_left")); back.title = "Mağaza seçimine dön"; back.setAttribute("aria-label", "Mağaza seçimine dön"); productPanel.append(back);
+      showBack();
       const form = el("form", undefined, "app-form"); form.noValidate = true;
       const inputs = {};
       const photo = field(form, "Ürün fotoğrafı", "product_photo", "", "file", { required: false });
       photo.accept = "image/jpeg,image/png,image/webp";
-      const preview = button("", () => editing.image_data_base64 && showPhoto(editing.image_data_base64), "photo-preview");
+      const photoFrame = el("div", undefined, "product-photo-frame");
+      const preview = button("", () => editing.image_data_base64 && showPhoto(editing.image_data_base64), "product-photo-preview"); preview.setAttribute("aria-label", "Ürün fotoğrafını büyüt");
+      const removePhoto = button("", () => { editing.image_data_base64 = null; photo.value = ""; mutate(); refreshPhoto(); }, "app-close product-photo-remove"); removePhoto.append(icon("close")); removePhoto.setAttribute("aria-label", "Fotoğrafı kaldır"); removePhoto.title = "Fotoğrafı kaldır";
       const refreshPhoto = () => {
         preview.replaceChildren(icon("image"));
         if (editing.image_data_base64) { const img = el("img"); img.src = `data:image/jpeg;base64,${editing.image_data_base64}`; img.alt = "Seçilen ürün fotoğrafını büyüt"; preview.replaceChildren(img); }
+        preview.disabled = !editing.image_data_base64; removePhoto.hidden = !editing.image_data_base64;
       };
-      refreshPhoto(); form.append(preview);
-      form.append(button("Fotoğrafı kaldır", () => { editing.image_data_base64 = null; photo.value = ""; mutate(); refreshPhoto(); }, "text-button"));
+      photoFrame.append(preview, removePhoto); refreshPhoto(); form.append(photoFrame);
       photo.addEventListener("change", async () => {
         const version = epoch; const target = editing;
         photo.disabled = true; submit.disabled = true;
@@ -229,11 +286,21 @@
         finally { photo.disabled = false; submit.disabled = false; }
       });
       inputs.product_link = field(form, "Ürün linki", "product_link", editing.product_link, "url", { max: 2048, required: false });
+      const paste = button("Yapıştır", async () => {
+        const version = epoch, target = editing;
+        try { const value = (await navigator.clipboard.readText()).trim(); if (version !== epoch || editing !== target) return; if (!R.link(value)) throw Error("Panodaki geçerli bir ürün linki değil."); inputs.product_link.value = value; editing.product_link = value; mutate(); }
+        catch (error) { message(error.message?.startsWith("Panodaki") ? error.message : "Panoya erişilemedi. Linki kutuya elle yapıştırabilirsin."); }
+      }, "text-button paste-link");
+      const oldLinkField = inputs.product_link.parentElement;
+      const linkField = el("div", undefined, "app-field link-field"), linkLabel = el("label", "Ürün linki");
+      inputs.product_link.id = "order-product-link"; linkLabel.htmlFor = inputs.product_link.id;
+      oldLinkField.replaceWith(linkField); linkField.append(linkLabel, inputs.product_link, paste);
       const branch = el("details", undefined, "app-disclosure"); const summary = el("summary", "Bu şubeden al"); branch.append(summary);
       inputs.branch = field(branch, "Mağaza şubesi", "branch", editing.branch, "text", { max: 200 });
+      const storeName = editing.store;
       const locationButton = button("", () => choosePoint({ latitude: editing.store_latitude, longitude: editing.store_longitude }, (p) => {
         editing.store_latitude = p.latitude; editing.store_longitude = p.longitude; mutate(); locationLabel();
-      }));
+      }, storeName, query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } })));
       const locationLabel = () => { locationButton.textContent = R.point(editing.store_latitude, editing.store_longitude) ? "Konum seçildi · Değiştir" : "Mağaza konumu seç"; };
       locationLabel(); branch.append(locationButton); form.append(branch);
       inputs.branch.addEventListener("input", () => { delete editing.store_latitude; delete editing.store_longitude; locationLabel(); });
@@ -264,10 +331,12 @@
     function addressForm(parent, address, onChange) {
       const inputs = {};
       const grid = el("div", undefined, "app-form-grid"); parent.append(grid);
-      for (const [key, label] of [["customer_name", "Alıcı adı soyadı"], ["customer_phone", "Cep telefonu"]]) inputs[key] = field(grid, label, key, address[key] || profile?.[key === "customer_name" ? "full_name" : "phone"], key === "customer_phone" ? "tel" : "text", { max: 100 });
+      inputs.customer_name = field(grid, "Alıcı adı soyadı", "customer_name", address.customer_name ?? profile?.full_name, "text", { max: 100 });
+      if (address.customer_name === undefined) address.customer_name = inputs.customer_name.value;
+      if (address.customer_phone === undefined) address.customer_phone = profile?.phone || "";
+      phoneField(grid, "Alıcı cep telefonu", "customer_phone", address.customer_phone, value => { address.customer_phone = value; onChange(); });
       inputs.district = field(grid, "İlçe", "district", address.district || "", "select", { values: [{ label: "İlçe seç", value: "" }, ...R.districts] });
       for (const [key, label] of [["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) inputs[key] = field(grid, label, key, address[key], "text", { max: 500 });
-      for (const key of ["customer_name", "customer_phone"]) if (!address[key]) address[key] = inputs[key].value;
       const locationButton = button("", () => choosePoint(address, (p) => { Object.assign(address, p); label(); onChange(); }));
       function label() { locationButton.textContent = R.point(address.latitude, address.longitude) ? "Teslimat konumu seçildi · Değiştir" : "Teslimat konumu seç"; }
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
@@ -307,7 +376,7 @@
         select.addEventListener("change", () => {
           const a = addresses.find((v) => v.id === select.value);
           draft.addressID = a?.id || null;
-          draft.address = a ? { ...R.clone(a), customer_name: profile.full_name, customer_phone: profile.phone } : {};
+          draft.address = a ? { ...R.clone(a), customer_name: a.recipient_name || profile.full_name, customer_phone: a.recipient_phone || profile.phone } : {};
           mutate(); cartPage();
         });
       }
@@ -327,14 +396,23 @@
       }
       cartPanel.append(delivery);
       const payments = el("fieldset", undefined, "app-options"); payments.append(el("legend", "Ödeme yöntemi"));
-      const bank = el("label", undefined, "choice-row"); const bankInput = el("input"); bankInput.type = "radio"; bankInput.name = "payment"; bankInput.checked = true;
+      const bank = el("label", undefined, "choice-row"); const bankInput = el("input"); bankInput.type = "radio"; bankInput.name = "payment"; bankInput.checked = draft.payment === "bank_transfer";
+      bankInput.addEventListener("change", () => { draft.payment = "bank_transfer"; mutate(); cartPage(); });
       bank.append(bankInput, el("strong", "Havale / EFT"));
       const card = el("label", undefined, "choice-row is-disabled"); const cardInput = el("input"); cardInput.type = "radio"; cardInput.disabled = true;
       const cardText = el("div"); cardText.append(el("strong", "Banka / kredi kartı"), el("small", "Banka entegrasyonu tamamlanınca açılacak.")); card.append(cardInput, cardText); payments.append(bank, card);
-      cartPanel.append(payments, el("p", "Havale / EFT için hesap bilgileri ve siparişe özel açıklama kodu sipariş oluşturulduktan sonra gösterilir. Ödeme onayı bankadan / yönetimden doğrulanır.", "muted"));
+      cartPanel.append(payments);
+      if (draft.payment === "bank_transfer") {
+        bankDetails(cartPanel);
+        cartPanel.append(el("p", "Para göndermeden önce siparişini onayla ve sunucunun verdiği açıklama kodunu kullan. Sipariş onayı ödeme alındığı anlamına gelmez.", "muted"));
+      }
       const summary = el("dl", undefined, "price-summary");
-      for (const [name, value] of [["Tahmini ürün bedeli", t().products], ["Hizmet ve teslimat (KDV dahil)", t().service], ["Promosyon indirimi", -t().discount], ["Toplam", t().total]]) {
-        const row = el("div"); row.append(el("dt", name), el("dd", money(value))); summary.append(row);
+      const chosenDelivery = typeof draft.express === "boolean";
+      const prices = [["Ürün bedeli", t().products], ["Hizmet ve Teslimat Bedeli (KDV Dahil)", chosenDelivery ? t().service : null]];
+      if (draft.promotion && t().discount > 0) prices.push(["Promosyon indirimi", -t().discount]);
+      prices.push(["Toplam", chosenDelivery ? t().total : null]);
+      for (const [name, value] of prices) {
+        const row = el("div"); row.append(el("dt", name), el("dd", value === null ? "—" : money(value))); summary.append(row);
       }
       cartPanel.append(summary);
       const promoForm = el("form", undefined, "promo-form");
@@ -350,7 +428,15 @@
           draft.promotion = { code: row.normalized_code, percent: row.discount_percent }; mutate(); cartPage();
         } catch (e) { message(e.message || "Promosyon doğrulanamadı."); } finally { apply.disabled = false; }
       }); cartPanel.append(promoForm);
-      cartPanel.append(button(accepted ? "Sipariş sözleşmeleri · Onaylandı" : "Sipariş sözleşmelerini oku ve onayla", async () => {
+      const agreements = el("section", undefined, "checkout-agreements");
+      agreements.append(el("h3", "Sipariş sözleşmeleri"), el("p", "Ürünler, tutarlar ve teslimat bilgileri bu siparişe özeldir. Üç belgeyi tek ekranda okuyup onaylayın; kabul edilen metin ve sipariş bilgileri değişmez kayıt olarak saklanır.", "muted"), el("p", "Satıcı ve tüketici faturasını düzenleyen: Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi"));
+      function approval(title, approved, action) {
+        const row = button("", action, "legal-approval"); row.setAttribute("aria-pressed", String(approved));
+        const check = el("span", undefined, "approval-indicator"); if (approved) check.append(icon("check"));
+        row.append(check, el("span", title)); if (approved) row.append(el("span", "Onaylandı", "approval-state"));
+        agreements.append(row);
+      }
+      approval("Ön Bilgilendirme, Mesafeli Sözleşme ve İade Koşulları", !!accepted, async () => {
         const version = epoch;
         try {
           const docs = await R.documents(draft, legal, host.email(), stores);
@@ -366,16 +452,24 @@
             accepted = docs; view.dialog.close(); cartPage();
           }, "button primary-button"));
         } catch (e) { message(e.message); }
-      }));
+      });
       const serviceDoc = legal.order.find((d) => d.document_type === "service_start");
-      const consent = el("label", undefined, "consent-row"); const checkbox = el("input"); checkbox.type = "checkbox"; checkbox.checked = serviceAccepted;
-      checkbox.addEventListener("change", () => { serviceAccepted = checkbox.checked; });
-      consent.append(checkbox, el("span", "Hizmetin cayma süresi dolmadan başlamasını açıkça talep ediyorum.")); cartPanel.append(consent);
-      cartPanel.append(button("Hizmet başlangıcı onay metni", async () => {
-        const docs = await R.documents(draft, legal, host.email(), stores); const view = modal(serviceDoc.title);
-        view.body.append(el("pre", docs.find((d) => d.document_type === "service_start").content, "legal-text"));
-      }, "text-button"));
-      const submit = button("Sipariş oluştur · Ödeme yükümlülüğü doğurur", submitOrder, "button primary-button");
+      approval(serviceDoc.title, serviceAccepted, async () => {
+        const version = epoch;
+        try {
+          const docs = await R.documents(draft, legal, host.email(), stores), snapshot = docs.find(doc => doc.document_type === "service_start");
+          if (version !== epoch) return;
+          const view = modal(serviceDoc.title); view.body.append(el("pre", snapshot.content, "legal-text"));
+          view.footer.append(button("Okudum ve kabul ediyorum", async () => {
+            const current = await R.documents(draft, legal, host.email(), stores);
+            if (version !== epoch || current.find(doc => doc.document_type === "service_start").content_hash !== snapshot.content_hash) { view.dialog.close(); return message("Bilgiler değişti; onay metnini yeniden aç."); }
+            serviceAccepted = true; view.dialog.close(); cartPage();
+          }, "button primary-button"));
+        } catch (error) { message(error.message); }
+      });
+      agreements.append(el("p", "Bu ayrı onay, kuryenin mağazaya hareketiyle hizmetin başlamasını ve yalnız müşteri kaynaklı sonraki iptalde gösterilen hizmet ve teslimat bedelinin iade edilmeyeceğini kaydeder.", "muted"));
+      cartPanel.append(agreements);
+      const submit = button("Öde ve onayla", submitOrder, "button primary-button");
       submit.disabled = !allowed(); cartPanel.append(submit);
       if (!allowed()) cartPanel.append(el("p", "Şu anda yeni sipariş alınamıyor. Sepetindeki bilgiler korunuyor.", "status status-error"));
       cartPanel.append(button("Sepeti ve adresi düzenle", () => { checkout = false; save(); cartPage(); }, "text-button"));
@@ -412,6 +506,7 @@
       productPanel.inert = true; cartPanel.inert = true;
       try {
         if (!await host.checkRuntime() || !allowed()) throw Error("Yeni sipariş alımı şu anda kapalı.");
+        if (typeof draft.express !== "boolean" || draft.payment !== "bank_transfer") throw Error("Teslimat ve ödeme seçeneği seç.");
         if (!accepted || !serviceAccepted) throw Error("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.");
         const snapshot = R.clone(draft);
         const docs = await R.documents(snapshot, legal, host.email(), stores);
@@ -431,10 +526,7 @@
         if (row.amountChanged) cartPanel.append(el("p", "Sunucu tutarı sepet tahmininden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste.", "status status-error"));
         cartPanel.append(el("p", `Sunucunun doğruladığı tutar: ${money(row.amount)}`), el("p", "Ödeme henüz doğrulanmadı."));
         if (!row.amountChanged) {
-          const bank = el("dl", undefined, "price-summary");
-          for (const [name, value] of [["Alıcı", "Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi"], ["IBAN", "TR78 0011 1000 0000 0168 3796 58"], ["Açıklama kodu", row.transfer_code]]) {
-            const line = el("div"); line.append(el("dt", name), el("dd", value)); bank.append(line);
-          } cartPanel.append(bank);
+          bankDetails(cartPanel, row.transfer_code);
         }
         cartPanel.append(button("Siparişi takip et", () => host.showOrder(row.order_id), "button primary-button"), button("Yeni sepet", () => {
           draft = R.newDraft(); frozen = null; accepted = null; serviceAccepted = false; checkout = false; save(); updateCartCount(); cartPage();
@@ -458,6 +550,8 @@
     }
     async function addressEditor(address = null) {
       const value = address ? R.clone(address) : { id: crypto.randomUUID(), city: "İstanbul" };
+      value.customer_name = value.recipient_name ?? profile.full_name;
+      value.customer_phone = value.recipient_phone ?? profile.phone;
       const view = modal(address ? "Adresi düzenle" : "Yeni adres ekle");
       const form = el("form", undefined, "app-form"); form.noValidate = true;
       const title = field(form, "Adres başlığı", "title", value.title || "", "text", { max: 100 });
@@ -472,7 +566,8 @@
           R.validateAddress(value);
           const body = { p_id: value.id, p_make_invoice: invoice.checked };
           for (const key of ["title", "city", "district", "neighborhood", "address_line", "building_no", "building_name", "directions", "latitude", "longitude"]) body[`p_${key}`] = value[key];
-          if (await rpc("save_customer_address", body) !== true) throw Error("Adres kaydedilemedi.");
+          body.p_recipient_name = value.customer_name.trim(); body.p_recipient_phone = R.phone(value.customer_phone);
+          if (await rpc("save_customer_address_v2", body) !== true) throw Error("Adres kaydedilemedi.");
           if (version !== epoch) return;
           view.dialog.close(); await host.refresh();
         } catch (e) { status(feedback, e.message || "Adres kaydedilemedi.", true); } finally { submit.disabled = false; }
@@ -485,6 +580,7 @@
       addresses.forEach((a) => {
         const row = el("article", undefined, "saved-address");
         row.append(el("strong", `${a.title}${a.is_invoice ? " · Fatura adresi" : ""}`), el("p", R.addressSummary(a)));
+        if (a.recipient_name || a.recipient_phone) row.append(el("p", [a.recipient_name, a.recipient_phone].filter(Boolean).join(" · ")));
         const commands = el("div", undefined, "item-commands");
         commands.append(button("Düzenle", () => addressEditor(a), "text-button"));
         const remove = button("Sil", () => {
@@ -505,9 +601,9 @@
     }
     async function init() {
       try {
-        const [c, l] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v6.json", { credentials: "omit" })]);
-        if (!c.ok || !l.ok) throw Error();
-        stores = (await c.json()).stores; legal = await l.json(); loaded = true; render();
+        const [c, l, p] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v6.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" })]);
+        if (!c.ok || !l.ok || !p.ok) throw Error();
+        stores = (await c.json()).stores; legal = await l.json(); countries = (await p.json()).countries; loaded = true; render();
       } catch { productPanel.replaceChildren(el("p", "Sipariş içeriği yüklenemedi. Sayfayı yeniden aç.", "status status-error")); }
     }
     function render() {
@@ -515,7 +611,7 @@
       if (stage === "product" && editing) productPage(); else storePage();
       cartPage(); renderAddresses(); updateCartCount();
     }
-    init();
+    const ready = init();
     return {
       sync(data) {
         const changed = owner !== data.owner;
@@ -526,14 +622,20 @@
             const stored = JSON.parse(sessionStorage.getItem(key()));
             if (stored?.owner === owner && (stored.frozen || Date.now() - stored.updated < 86400000) && stored.draft?.items?.length <= 30 && JSON.stringify(stored).length < 15000000) {
               draft = stored.draft; frozen = stored.frozen; checkout = stored.checkout; stage = stored.stage; editing = draft.editing || null;
+              if (!draft.selectionVersion && !frozen) { draft.express = null; draft.payment = null; draft.selectionVersion = 1; }
             }
           } catch { /* Invalid drafts are not submitted. */ }
         }
         profile = data.profile; addresses = data.addresses || []; runtime = data.runtime;
+        if (profile && !frozen) {
+          const buyer = { full_name: profile.full_name, phone: profile.phone };
+          if (JSON.stringify(draft.buyer) !== JSON.stringify(buyer)) { draft.buyer = buyer; accepted = null; serviceAccepted = false; save(); }
+        }
         if (changed) render(); else renderAddresses();
       },
-      show(view) { if (!loaded) return; if (view === "shop") { if (stage === "product" && editing) productPage(); else storePage(); } if (view === "cart") cartPage(); },
+      show(view) { currentView = view; showBack(); if (!loaded) return; if (view === "shop") { if (stage === "product" && editing) productPage(); else storePage(); } if (view === "cart") cartPage(); },
       clear() {
+        searchCache.clear();
         if (owner) try { sessionStorage.removeItem(key()); } catch { /* Memory-only browser. */ }
         this.sync({ owner: null, profile: null, addresses: [], runtime: null });
       },
@@ -550,6 +652,7 @@
       async editProfile() {
         const version = epoch;
         try {
+          await ready; if (!loaded || version !== epoch) return;
           const [billings, photos] = await Promise.all([
             host.api(`/rest/v1/customer_billing_profiles?select=identity_number,invoice_type,company_name,tax_office,tax_number,billing_address,postal_code&user_id=eq.${owner}`),
             host.api(`/rest/v1/customer_profile_photos?select=photo_base64&user_id=eq.${owner}`)
@@ -558,18 +661,24 @@
           const billing = billings?.[0] || {};
           const view = modal("Profil ve fatura bilgileri");
           const form = el("form", undefined, "app-form"); form.noValidate = true;
-          const name = field(form, "Ad soyad", "profile_full_name", profile.full_name, "text", { max: 100 });
-          const phone = field(form, "Cep telefonu", "profile_phone", profile.phone, "tel", { max: 25 });
+          const parts = R.splitName(profile.full_name);
+          const firstName = field(form, "Ad", "profile_first_name", parts.firstName, "text", { max: 100, autocomplete: "given-name" });
+          const lastName = field(form, "Soyad", "profile_last_name", parts.lastName, "text", { max: 100, autocomplete: "family-name" });
+          const phone = phoneField(form, "Cep telefonu", "profile_phone", profile.phone);
           const fields = {};
           fields.invoice_type = field(form, "Fatura türü", "invoice_type", billing.invoice_type || "individual", "select", { values: [{ value: "individual", label: "Bireysel" }, { value: "corporate", label: "Kurumsal" }] });
           for (const [key, label, max] of [["identity_number", "T.C. kimlik numarası", 11], ["company_name", "Şirket unvanı", 200], ["tax_office", "Vergi dairesi", 100], ["tax_number", "Vergi numarası", 11], ["billing_address", "Fatura adresi", 500], ["postal_code", "Posta kodu", 10]]) fields[key] = field(form, label, key, billing[key], "text", { required: false, max });
+          const corporateFields = ["company_name", "tax_office", "tax_number", "billing_address", "postal_code"];
+          const syncInvoice = () => corporateFields.forEach(key => { fields[key].parentElement.hidden = fields.invoice_type.value !== "corporate"; });
+          fields.invoice_type.addEventListener("change", syncInvoice); syncInvoice();
           const feedback = el("div"); view.body.append(form, feedback);
           const saveButton = button("Kaydet", async () => {
             saveButton.disabled = true;
             try {
               if (version !== epoch) return;
-              if (!name.value.trim() || !R.phone(phone.value)) throw Error("Ad soyad ve telefonunu kontrol et.");
-              const body = { p_full_name: name.value.trim(), p_phone: R.phone(phone.value), p_photo_base64: photos?.[0]?.photo_base64 || "" };
+              const fullName = [firstName.value.trim(), lastName.value.trim()].join(" ");
+              if (!firstName.value.trim() || !lastName.value.trim() || fullName.length > 100 || !phone.value()) throw Error("Ad, soyad ve telefonunu kontrol et.");
+              const body = { p_full_name: fullName, p_phone: phone.value(), p_photo_base64: photos?.[0]?.photo_base64 || "" };
               for (const [key, input] of Object.entries(fields)) body[`p_${key}`] = input.value.trim();
               const result = await rpc("update_customer_profile_secure", body);
               if (version !== epoch) return;

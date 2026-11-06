@@ -78,7 +78,6 @@
     portalStatus: document.getElementById("portal-status"),
     loading: document.getElementById("portal-loading"),
     welcomeTitle: document.getElementById("welcome-title"),
-    lastUpdated: document.getElementById("last-updated"),
     logoutButton: document.getElementById("logout-button"),
     ordersList: document.getElementById("orders-list"),
     historyList: document.getElementById("history-list"),
@@ -89,6 +88,7 @@
     supportSubmit: document.getElementById("support-submit"),
     supportList: document.getElementById("support-list"),
     profileName: document.getElementById("profile-name"),
+    profileSurname: document.getElementById("profile-surname"),
     profileEmail: document.getElementById("profile-email"),
     profilePhone: document.getElementById("profile-phone"),
     profilePasswordReset: document.getElementById("profile-password-reset")
@@ -293,6 +293,7 @@
   }
 
   function setPortalVisible(isVisible) {
+    document.documentElement.dataset.sessionState = isVisible ? "signed-in" : "signed-out";
     elements.authView.hidden = isVisible;
     elements.portalView.hidden = !isVisible;
   }
@@ -314,7 +315,6 @@
     state.activities = [];
     state.supportTickets = [];
     elements.welcomeTitle.textContent = "Hesabım";
-    elements.lastUpdated.textContent = "";
     elements.ordersList.replaceChildren();
     delete elements.ordersList.dataset.signature;
     elements.historyList.replaceChildren();
@@ -322,6 +322,7 @@
     elements.addressesList.replaceChildren();
     elements.supportList.replaceChildren();
     elements.profileName.textContent = "-";
+    elements.profileSurname.textContent = "-";
     elements.profileEmail.textContent = "-";
     elements.profilePhone.textContent = "-";
     elements.supportMessage.value = "";
@@ -379,20 +380,20 @@
     container.append(empty);
   }
 
-  function renderTimeline(order) {
+  function renderTimeline(order = null) {
     const timeline = element("ol", "order-timeline");
-    if (order.status === "cancelled") {
+    if (order?.status === "cancelled") {
       const cancelled = element("li", "is-current is-cancelled", "Sipariş iptal edildi");
       timeline.append(cancelled);
       return timeline;
     }
 
-    const orderActivities = state.activities.filter((item) => item.order_id === order.id);
-    const courierStarted = order.status === "shopping"
-      || order.status === "on_the_way"
-      || order.status === "delivered"
+    const orderActivities = state.activities.filter((item) => item.order_id === order?.id);
+    const courierStarted = order?.status === "shopping"
+      || order?.status === "on_the_way"
+      || order?.status === "delivered"
       || orderActivities.some((item) => item.action === "store_departure_started" && item.current_assignment === true);
-    const currentIndex = order.status === "delivered"
+    const currentIndex = !order ? -1 : order.status === "delivered"
       ? 3
       : order.status === "on_the_way"
         ? 2
@@ -420,30 +421,39 @@
     const timestamp = element("p", "muted", "Güncel kurye konumu bekleniyor.");
     const coordinates = element("p", "courier-coordinates"); coordinates.hidden = true;
     const privacy = element("p", "muted", "Haritayı açtığında OpenStreetMap’e IP adresin ve görüntülenen alan iletilir.");
-    const mapButton = element("button", "button compact-button", "Kurye haritasını aç"); mapButton.type = "button"; mapButton.disabled = true;
+    const mapButton = element("button", "button compact-button", "Kurye haritasını aç"); mapButton.type = "button";
     const mapBox = element("div", "app-map"); mapBox.hidden = true; mapBox.setAttribute("aria-label", "Güncel kurye haritası");
-    section.append(element("h3", "", "Kurye konumu"), timestamp, coordinates, privacy, mapButton, mapBox);
+    const mapStatus = element("p", "muted"); mapStatus.setAttribute("role", "status");
+    section.append(element("h3", "", "Kurye konumu"), timestamp, coordinates, privacy, mapButton, mapBox, mapStatus);
     const version = state.generation;
     let map = null, marker = null, position = null, snapshot = null, inFlight = false, destroyed = false;
     function clearLocation(message) {
       timestamp.textContent = message; coordinates.textContent = ""; coordinates.hidden = true;
-      position = null; snapshot = null; mapButton.disabled = true; mapButton.hidden = false;
-      if (map) { map.remove(); map = null; marker = null; }
-      mapBox.hidden = true;
+      position = null; snapshot = null;
+      if (marker) { marker.remove(); marker = null; }
     }
     function openMap() {
-      if (!position || !MAOrderRules.freshPosition(snapshot)) return;
-      mapBox.hidden = false;
-      if (!map) {
-        map = L.map(mapBox).setView(position, 15);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, referrerPolicy: "strict-origin", attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>' }).addTo(map);
-        marker = L.circleMarker(position, { radius: 9, color: "#13675b", fillOpacity: 1 }).addTo(map);
-      }
-      map.invalidateSize(); marker.setLatLng(position); mapButton.hidden = true;
+      try {
+        if (!window.L?.map) throw Error();
+        mapBox.hidden = false;
+        const fresh = position && MAOrderRules.freshPosition(snapshot);
+        if (!map) {
+          map = L.map(mapBox).setView(fresh ? position : [41.072, 28.99], fresh ? 15 : 11);
+          const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, referrerPolicy: "strict-origin", attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>' }).addTo(map);
+          tiles.on("tileerror", () => { mapStatus.textContent = "Harita görüntüsü alınamıyor. İnternet bağlantını kontrol et; konum bilgisi ayrıca güncellenir."; });
+          tiles.on("load", () => { if (mapBox.querySelector(".leaflet-tile-loaded")) mapStatus.textContent = ""; });
+        }
+        if (fresh) {
+          if (!marker) { marker = L.circleMarker(position, { radius: 9, color: "#13675b", fillOpacity: 1 }).addTo(map); map.setView(position, 15); }
+          else { marker.setLatLng(position); if (!map.getBounds().contains(position)) map.panTo(position); }
+        }
+        requestAnimationFrame(() => { if (!destroyed && map) map.invalidateSize(); });
+        mapButton.hidden = true;
+      } catch { mapStatus.textContent = "Harita bileşeni açılamadı. Sayfayı yeniden açabilirsin."; mapButton.hidden = false; }
     }
     mapButton.addEventListener("click", () => {
-      if (!MAOrderRules.freshPosition(snapshot)) return clearLocation("Güncel kurye konumu bekleniyor.");
-      state.openLocationMaps.add(order.id); openMap();
+      if (!MAOrderRules.freshPosition(snapshot)) clearLocation("Güncel kurye konumu bekleniyor.");
+      state.openLocationMaps.add(order.id); openMap(); void update();
     });
     async function update() {
       if (destroyed || inFlight || !card.isConnected || !card.open || document.hidden || card.closest("[data-panel]")?.hidden || version !== state.generation) return;
@@ -451,11 +461,11 @@
       inFlight = true;
       try {
         const rows = await api("/rest/v1/rpc/get_order_courier_position", { method: "POST", body: { target_order_id: order.id } });
-        if (destroyed || version !== state.generation || !card.isConnected) return;
+        if (destroyed || version !== state.generation || !card.isConnected || !state.orders.some(value => value.id === order.id && ACTIVE_ORDER_STATUSES.has(value.status))) return;
         const point = rows?.[0];
         if (MAOrderRules.freshPosition(point)) {
           snapshot = point; position = [point.latitude, point.longitude];
-          timestamp.textContent = `Son konum: ${formatDate(point.captured_at)}`;
+          timestamp.textContent = "Kurye konumu güncel.";
           coordinates.textContent = `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`; coordinates.hidden = false;
           mapButton.disabled = false;
           if (marker) marker.setLatLng(position);
@@ -601,7 +611,10 @@
         return card;
       }));
     } else {
-      renderEmpty(container, active ? "Aktif siparişin yok" : "Geçmiş sipariş bulunamadı", active ? "Yeni siparişin burada görünecek." : "Tamamlanan siparişlerini bu bölümden açabilirsin.");
+      if (active) {
+        const empty = element("article", "order-card empty-state tracking-placeholder");
+        empty.append(element("strong", "", "Aktif sipariş yok"), renderTimeline()); container.replaceChildren(empty);
+      } else renderEmpty(container, "Geçmiş sipariş bulunamadı", "Tamamlanan siparişlerini bu bölümden açabilirsin.");
     }
   }
   function renderOrders() {
@@ -656,7 +669,9 @@
   function renderProfile() {
     const name = state.profile?.full_name || "Müşteri";
     elements.welcomeTitle.textContent = `Merhaba, ${name.split(" ")[0]}`;
-    elements.profileName.textContent = name;
+    const parts = MAOrderRules.splitName(state.profile?.full_name);
+    elements.profileName.textContent = parts.firstName || "-";
+    elements.profileSurname.textContent = parts.lastName || "-";
     elements.profileEmail.textContent = state.session?.user?.email || "-";
     elements.profilePhone.textContent = state.profile?.phone || "-";
   }
@@ -667,7 +682,6 @@
     renderAddresses();
     renderSupport();
     syncOrderFlow();
-    elements.lastUpdated.textContent = `Son güncelleme: ${new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" }).format(new Date())}`;
   }
 
   async function fetchProfile() {
@@ -678,7 +692,7 @@
   }
 
   async function fetchAddresses() {
-    return api(`/rest/v1/customer_addresses?select=id,title,city,district,neighborhood,address_line,building_no,building_name,directions,is_invoice,latitude,longitude&customer_id=eq.${state.session.user.id}&order=created_at.desc`);
+    return api(`/rest/v1/customer_addresses?select=id,title,city,district,neighborhood,address_line,building_no,building_name,directions,is_invoice,latitude,longitude,recipient_name,recipient_phone&customer_id=eq.${state.session.user.id}&order=created_at.desc`);
   }
 
   async function fetchOrders() {
@@ -801,8 +815,25 @@
     window.location.replace("/hesabim/");
   }
 
+  let homeLoad = null;
+  function loadHome() {
+    if (homeLoad) return homeLoad;
+    const panel = document.getElementById("view-home");
+    homeLoad = fetch("/", { credentials: "omit", cache: "no-cache" }).then(async response => {
+      if (!response.ok) throw Error();
+      const parsed = new DOMParser().parseFromString(await response.text(), "text/html");
+      const content = parsed.querySelector("main.home-main"); if (!content) throw Error();
+      content.querySelectorAll("script, iframe, object, embed, form").forEach(node => node.remove());
+      for (const node of content.querySelectorAll("*")) for (const attribute of [...node.attributes]) {
+        if (attribute.name.startsWith("on")) node.removeAttribute(attribute.name);
+      }
+      panel.replaceChildren(...[...content.childNodes].map(node => document.importNode(node, true)));
+    }).catch(() => { homeLoad = null; panel.replaceChildren(element("p", "status status-error", "Ana sayfa şu anda yüklenemiyor.")); });
+    return homeLoad;
+  }
+
   function openView(viewName) {
-    if (!["shop", "cart", "orders", "history", "profile", "addresses", "support"].includes(viewName)) return;
+    if (!["home", "shop", "cart", "orders", "history", "profile", "addresses", "support"].includes(viewName)) return;
     if (state.session) try { sessionStorage.setItem(`magazadanal.web.view.v1.${state.session.user.id}`, viewName); } catch { /* Memory-only navigation. */ }
     hideStatus(document.getElementById("order-status"));
     orderFlow?.show(viewName);
@@ -815,6 +846,7 @@
       button.setAttribute("aria-current", active ? "page" : "false");
     });
     if (viewName === "orders") locationControllers.forEach(controller => { void controller.update(); });
+    if (viewName === "home") void loadHome();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -839,7 +871,8 @@
       elements.password.type = "password";
       setPortalVisible(true);
       await loadPortal();
-      restoreView();
+      restoreView(true);
+      void loadHome();
     } catch (error) {
       saveSession(null);
       if (!state.webAccountEnabled) {
@@ -949,9 +982,13 @@
 
   async function bootstrap() {
     startRuntimeStatusMonitor();
-    if (!await enforceRuntimeStatus()) { window.setTimeout(bootstrap, 15000); return; }
-
     const stored = readStoredSession();
+    if (stored) state.session = stored;
+    if (!await enforceRuntimeStatus()) {
+      if (document.documentElement.dataset.sessionState === "restoring") document.querySelector(".session-restoring").textContent = state.maintenanceMessage;
+      window.setTimeout(bootstrap, 15000); return;
+    }
+
     if (!stored) {
       setPortalVisible(false);
       return;
@@ -959,13 +996,15 @@
 
     state.session = stored;
     try {
-      await refreshSession();
-      setPortalVisible(true);
+      if (!stored.accessToken || stored.expiresAt < Date.now() + 30000) await refreshSession();
       await loadPortal();
+      if (!state.session) return;
+      setPortalVisible(true);
       restoreView();
+      void loadHome();
     } catch (error) {
       if ([400, 401, 403].includes(error.status)) handleExpiredSession();
-      else { setPortalVisible(true); showStatus(elements.portalStatus, "Bağlantı kurulamadı; oturum ve taslak korunuyor. Yeniden bağlandığında bilgiler güncellenecek.", "error"); scheduleRefresh(); }
+      else { setPortalVisible(true); restoreView(); showStatus(elements.portalStatus, "Bağlantı kurulamadı; oturum ve taslak korunuyor. Yeniden bağlandığında bilgiler güncellenecek.", "error"); scheduleRefresh(); }
     }
   }
 
@@ -991,7 +1030,7 @@
   function syncOrderFlow() {
     orderFlow?.sync({ owner: state.session?.user?.id || null, profile: state.profile, addresses: state.addresses, runtime: state.runtime });
   }
-  function restoreView() {
+  function restoreView(freshLogin = false) {
     if (!state.session) return;
     let saved = null;
     try {
@@ -1001,7 +1040,8 @@
       if (MAOrderRules.UUID.test(support?.requestID || "")) { elements.supportForm.dataset.requestID = support.requestID; elements.supportMessage.readOnly = true; }
       elements.supportCharacterCount.textContent = `${elements.supportMessage.value.length} / 2000`;
     } catch { /* Restore only available tab-local state. */ }
-    openView(new URLSearchParams(location.search).get("view") || saved || "orders");
+    const target = freshLogin ? "shop" : new URLSearchParams(location.search).get("view") || saved || "shop";
+    openView(target);
   }
   document.getElementById("signup-toggle").addEventListener("click", () => {
     const form = document.getElementById("signup-form"); form.hidden = !form.hidden; elements.loginForm.hidden = !form.hidden;

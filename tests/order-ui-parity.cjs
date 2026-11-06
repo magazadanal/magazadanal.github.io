@@ -20,6 +20,7 @@ async function main() {
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co"); let data;
         if (url.pathname.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
+        else if (url.pathname === "/functions/v1/web-store-search") data = { results: [] };
         else if (url.pathname === "/auth/v1/token") data = { access_token: "mock-access", refresh_token: "mock-refresh", expires_in: 3600, user: { id: owner, email: "test@example.invalid" } };
         else if (url.pathname === "/rest/v1/profiles") data = [{ id: owner, full_name: "Test Müşteri", phone: "+905301234567", role: "customer", is_active: true }];
         else if (["/rest/v1/customer_addresses", "/rest/v1/orders", "/rest/v1/rpc/list_order_activity", "/rest/v1/rpc/list_support_tickets_v3"].includes(url.pathname)) data = [];

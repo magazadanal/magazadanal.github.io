@@ -11,7 +11,7 @@ function item(extra = {}) {
     store_latitude: 41.07, store_longitude: 29, ...extra };
 }
 function draft() {
-  return { ...R.newDraft(), items: [item()], address: { customer_name: "Test Müşteri", customer_phone: "05301234567",
+  return { ...R.newDraft(), express: true, items: [item()], address: { customer_name: "Test Müşteri", customer_phone: "05301234567",
     district: "Şişli", neighborhood: "Test", address_line: "Test Sokak", building_no: "1", building_name: "Test bina kat 1 daire 2",
     directions: "Test kapı", latitude: 41.07, longitude: 29 } };
 }
@@ -78,6 +78,26 @@ test("uncertain, rejected and mismatched responses never mean paid", () => {
   assert.equal(R.result(row, 460).amountChanged, false);
   assert.equal(R.result(row, 100).amountChanged, true);
   assert.equal("paid" in R.result(row, 460), false);
+});
+test("checkout starts without implicit delivery/payment or fee; recipient differs from legal buyer", async () => {
+  const empty = R.newDraft(); assert.equal(empty.express, null); assert.equal(empty.payment, null);
+  assert.equal(R.totals([item()], null).service, 0);
+  const d = draft(); d.buyer = { full_name: "Buyer Legal", phone: "+447700900123" };
+  d.address.customer_name = "Recipient Other";
+  const docs = await R.documents(d, legal, "buyer@example.invalid", stores);
+  assert.ok(docs.some(doc => doc.content.includes("Buyer Legal")));
+  assert.ok(!docs.some(doc => doc.content.includes("Recipient Other")));
+  assert.equal(R.payload(d, docs).delivery_address.customer_name, "Recipient Other");
+  d.express = null; await assert.rejects(R.documents(d, legal, "buyer@example.invalid", stores));
+  assert.throws(() => R.payload(d, docs));
+});
+test("name and international telephone fields are reversible, including incomplete drafts", () => {
+  const countries = require("../assets/phone-countries.json").countries;
+  assert.deepEqual(R.splitName("Test Multiple Surname"), { firstName: "Test", lastName: "Multiple Surname" });
+  assert.equal(R.joinedPhone("+90", "0530 123 45 67"), "+905301234567");
+  assert.equal(R.joinedPhone("+44", "7700900123"), "+447700900123");
+  assert.deepEqual(R.splitPhone("+90530", countries), { code: "+90", number: "530" });
+  assert.equal(R.joinedPhone("+90", "abc"), null);
 });
 test("courier positions require fresh capture AND receipt and bounded accuracy", () => {
   const now = Date.now();

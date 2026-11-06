@@ -15,7 +15,8 @@
   <link rel="apple-touch-icon" href="/assets/magazadanal-logo.png?v=20261007-3">
   <link rel="stylesheet" href="/styles.css?v=20261019-1">
   <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/hesabim/order-flow.css?v=20261106-2">
+  <link rel="stylesheet" href="/hesabim/order-flow.css?v=20261107-1">
+  <script src="/hesabim/session-restore.js?v=20261107-1"></script>
   <script src="/theme.js?v=20261019-1"></script>
 </head>
 <body>
@@ -28,6 +29,7 @@
   </header>
 
   <main class="portal-page">
+    <div class="session-restoring" role="status">Hesabın açılıyor…</div>
     <section id="auth-view" class="auth-shell" aria-label="Giriş formu">
       <div id="auth-status" class="status" role="status" aria-live="polite" hidden></div>
 
@@ -77,7 +79,7 @@
     <section id="portal-view" hidden>
       <div class="portal-layout">
       <nav class="portal-tabs" aria-label="Hesap bölümleri">
-        <a class="portal-tab" href="/"><img class="app-icon" src="/assets/icons/house_fill.png" alt="">Ana Sayfa</a>
+        <button class="portal-tab" type="button" data-view="home"><img class="app-icon" src="/assets/icons/house_fill.png" alt="">Ana Sayfa</button>
         <button class="portal-tab" type="button" data-view="shop"><img class="app-icon" src="/assets/icons/plus_circle_fill.png" alt="">Sipariş</button>
         <button class="portal-tab" type="button" data-view="cart"><img class="app-icon" src="/assets/icons/cart_fill.png" alt=""><span>Sepet<span data-cart-count></span></span></button>
         <button class="portal-tab is-active" type="button" data-view="orders">Takip</button>
@@ -88,25 +90,22 @@
         <div>
           <p class="eyebrow">Müşteri paneli</p>
           <h1 id="welcome-title" class="portal-title">Hesabım</h1>
-          <p id="last-updated" class="portal-updated"></p>
-        </div>
-        <div class="portal-actions">
-          <button id="logout-button" class="button compact-button" type="button">Çıkış yap</button>
         </div>
       </div>
 
       <div id="portal-status" class="status" role="status" aria-live="polite" hidden></div>
-      <div id="order-status" role="status" aria-live="polite" hidden></div>
 
       <div id="portal-loading" class="portal-loading" hidden>Bilgiler yükleniyor...</div>
 
-      <section class="portal-section order-app" data-panel="shop" hidden><div id="order-flow"></div></section>
+      <section id="view-home" class="portal-section home-main" data-panel="home" hidden></section>
+      <button id="product-back" class="product-back" type="button" hidden>Geri</button>
+
+      <section class="portal-section order-app" data-panel="shop"><div id="order-flow"></div></section>
       <section class="portal-section order-app" data-panel="cart" hidden><div id="cart-flow"></div></section>
 
-      <section id="view-orders" class="portal-section" data-panel="orders">
+      <section id="view-orders" class="portal-section" data-panel="orders" hidden>
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Siparişlerim</p>
             <h2>Sipariş takibi</h2>
           </div>
         </div>
@@ -150,17 +149,17 @@
       <section id="view-profile" class="portal-section" data-panel="profile" hidden>
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Hesap</p>
-            <h2>Profil bilgilerim</h2>
+            <h2>Kişisel bilgilerim</h2>
           </div>
         </div>
         <dl class="profile-details">
-          <div><dt>Ad soyad</dt><dd id="profile-name">-</dd></div>
+          <div><dt>Ad</dt><dd id="profile-name">-</dd></div>
+          <div><dt>Soyad</dt><dd id="profile-surname">-</dd></div>
           <div><dt>Mail adresi</dt><dd id="profile-email">-</dd></div>
           <div><dt>Telefon</dt><dd id="profile-phone">-</dd></div>
         </dl>
         <button id="profile-password-reset" class="button compact-button" type="button">Parola yenileme bağlantısı gönder</button>
-        <button id="profile-edit" class="button compact-button" type="button">Profil ve fatura bilgilerini düzenle</button>
+        <button id="profile-edit" class="button compact-button" type="button">Kişisel ve fatura bilgilerini düzenle</button>
         <div class="profile-menu">
           <button type="button" data-open-view="addresses">Adreslerim <span aria-hidden="true">›</span></button>
           <button type="button" data-open-view="support">Bize Ulaşın <span aria-hidden="true">›</span></button>
@@ -169,7 +168,9 @@
           <a href="/privacy/">Gizlilik ve KVKK</a>
           <a href="/hesap-silme/">Hesap ve veri silme</a>
         </div>
+        <button id="logout-button" class="button compact-button danger-button" type="button">Çıkış yap</button>
       </section>
+      <div id="order-status" role="status" aria-live="polite" hidden></div>
       </div>
       </div>
     </section>
@@ -177,8 +178,8 @@
 
   <footer><span>© 2026 Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi</span><a href="/alisveris-kosullari/">Satış, teslimat ve iade</a><a href="/destek/">Bize Ulaşın</a><a href="/privacy/">KVKK Aydınlatma Metni</a></footer>
   <script src="/assets/vendor/leaflet/leaflet.js" defer></script>
-  <script src="/hesabim/order-rules.js?v=20261106-1" defer></script>
-  <script src="/hesabim/order-flow.js?v=20261106-2" defer></script>
-  <script src="/hesabim/hesabim.js?v=20261106-2" defer></script>
+  <script src="/hesabim/order-rules.js?v=20261107-1" defer></script>
+  <script src="/hesabim/order-flow.js?v=20261107-1" defer></script>
+  <script src="/hesabim/hesabim.js?v=20261107-1" defer></script>
 </body>
 </html>
