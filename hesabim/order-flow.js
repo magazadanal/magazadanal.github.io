@@ -82,7 +82,7 @@
   const searchCache = new Map(); let nextSearchAt = 0;
   function choosePoint(initial, onChoose, storeName = "", searchPlaces = null) {
     const view = modal("Konum seç");
-    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Nominatim’e mağaza / şube metnini iletir." : "") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
+    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : "") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
     const start = button("Haritayı aç", () => {
       start.remove();
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
