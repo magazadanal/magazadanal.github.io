@@ -25,24 +25,17 @@ test("pinned map dependency retains license and audited bytes", () => {
   for (const [file, expected] of [["leaflet.js", "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a"], ["leaflet.css", "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6"]]) assert.equal(crypto.createHash("sha256").update(read(`assets/vendor/leaflet/${file}`)).digest("hex"), expected);
   assert.ok(read("assets/vendor/leaflet/LICENSE").includes("Redistribution"));
 });
-test("header reference limits maps, image data and geolocation to the account path", () => {
-  const blocks = new Map(); let block;
-  for (const line of read("_headers").split(/\r?\n/)) {
-    if (line.startsWith("/")) { block = {}; blocks.set(line, block); }
-    else if (line.trim()) { const index = line.indexOf(":"); block[line.slice(0, index).trim()] = line.slice(index + 1).trim(); }
+test("account and public conditions policies allow only their required resources", () => {
+  const account = read("hesabim/index.html"), terms = read("alisveris-kosullari/index.html"), preview = read("scripts/preview.cjs");
+  assert.ok(account.includes("connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co;"));
+  assert.ok(account.includes("img-src 'self' data: https://tile.openstreetmap.org;"));
+  assert.ok(terms.includes("connect-src 'self';"));
+  for (const html of [account, terms]) {
+    assert.ok(html.includes("default-src 'none';"));
+    assert.ok(html.includes("script-src 'self';"));
+    assert.ok(!/unsafe-inline|unsafe-eval|https:\/\/\*/.test(html));
   }
-  const global = blocks.get("/*"), account = blocks.get("/hesabim/*"), terms = blocks.get("/alisveris-kosullari/*");
-  assert.ok(global["Permissions-Policy"].includes("geolocation=()"));
-  assert.ok(!global["Content-Security-Policy"].includes("tile.openstreetmap.org"));
-  assert.ok(account["Content-Security-Policy"].includes("connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co;"));
-  assert.ok(account["Content-Security-Policy"].includes("img-src 'self' data: https://tile.openstreetmap.org;"));
-  assert.equal(account["Permissions-Policy"], global["Permissions-Policy"].replace("geolocation=()", "geolocation=(self)"));
-  assert.equal(account["Cache-Control"], "no-store, max-age=0");
-  assert.ok(terms["Content-Security-Policy"].includes("connect-src 'self';"));
-  for (const policy of [global, account, terms]) {
-    const csp = policy["Content-Security-Policy"];
-    assert.ok(csp.includes("script-src 'self';"));
-    assert.ok(csp.includes("frame-src 'none';"));
-    assert.ok(!/unsafe-inline|unsafe-eval|https:\/\/\*/.test(csp));
-  }
+  assert.ok(account.includes("frame-src 'none';"));
+  assert.ok(preview.includes('geolocation=${account ? "(self)" : "()"}'));
+  assert.ok(read("docs/web-bank-readiness.md").includes("GitHub Pages tarafından uygulanmaz"));
 });
