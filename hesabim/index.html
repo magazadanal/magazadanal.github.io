@@ -6,7 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'none'; connect-src https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; manifest-src 'self'"
+    content="default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; manifest-src 'self'"
   >
   <title>Hesabım · Mağazadan Al</title>
   <meta name="description" content="Mağazadan Al müşteri hesabı, sipariş takibi ve destek merkezi.">
@@ -14,6 +14,8 @@
   <link rel="icon" type="image/png" href="/assets/magazadanal-logo.png?v=20261007-3">
   <link rel="apple-touch-icon" href="/assets/magazadanal-logo.png?v=20261007-3">
   <link rel="stylesheet" href="/styles.css?v=20261019-1">
+  <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/hesabim/order-flow.css?v=20261106-2">
   <script src="/theme.js?v=20261019-1"></script>
 </head>
 <body>
@@ -27,8 +29,6 @@
 
   <main class="portal-page">
     <section id="auth-view" class="auth-shell" aria-label="Giriş formu">
-      <p>Siparişlerini, adreslerini ve destek mesajlarını görüntüle.</p>
-
       <div id="auth-status" class="status" role="status" aria-live="polite" hidden></div>
 
       <form id="login-form" class="auth-form" novalidate>
@@ -62,9 +62,28 @@
         <button id="login-button" class="button primary-button" type="submit">Giriş yap</button>
         <button id="forgot-password-button" class="text-button" type="button">Şifremi unuttum</button>
       </form>
+      <button id="signup-toggle" class="text-button" type="button">Hesap oluştur</button>
+      <form id="signup-form" class="auth-form" hidden>
+        <label for="signup-name">Ad soyad</label><input id="signup-name" autocomplete="name" maxlength="100" required>
+        <label for="signup-email">E-posta</label><input id="signup-email" type="email" autocomplete="email" maxlength="254" required>
+        <label for="signup-phone">Cep telefonu</label><input id="signup-phone" type="tel" autocomplete="tel" maxlength="25" required>
+        <label for="signup-password">Şifre (8–72 karakter)</label><input id="signup-password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+        <label for="signup-confirm">Şifreyi tekrar yaz</label><input id="signup-confirm" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
+        <p><a href="/privacy/">Kişisel verilerin işlenmesine ilişkin aydınlatma metni</a></p>
+        <button type="submit" class="button primary-button">Hesap oluştur</button>
+      </form>
     </section>
 
     <section id="portal-view" hidden>
+      <div class="portal-layout">
+      <nav class="portal-tabs" aria-label="Hesap bölümleri">
+        <a class="portal-tab" href="/"><img class="app-icon" src="/assets/icons/house_fill.png" alt="">Ana Sayfa</a>
+        <button class="portal-tab" type="button" data-view="shop"><img class="app-icon" src="/assets/icons/plus_circle_fill.png" alt="">Sipariş</button>
+        <button class="portal-tab" type="button" data-view="cart"><img class="app-icon" src="/assets/icons/cart_fill.png" alt=""><span>Sepet<span data-cart-count></span></span></button>
+        <button class="portal-tab is-active" type="button" data-view="orders">Takip</button>
+        <button class="portal-tab" type="button" data-view="profile">Profil</button>
+      </nav>
+      <div class="portal-content">
       <div class="portal-toolbar">
         <div>
           <p class="eyebrow">Müşteri paneli</p>
@@ -72,21 +91,17 @@
           <p id="last-updated" class="portal-updated"></p>
         </div>
         <div class="portal-actions">
-          <button id="refresh-button" class="icon-command" type="button" title="Yenile" aria-label="Yenile">↻</button>
           <button id="logout-button" class="button compact-button" type="button">Çıkış yap</button>
         </div>
       </div>
 
       <div id="portal-status" class="status" role="status" aria-live="polite" hidden></div>
-
-      <nav class="portal-tabs" aria-label="Hesap bölümleri">
-        <button class="portal-tab is-active" type="button" data-view="orders">Takip</button>
-        <button class="portal-tab" type="button" data-view="addresses">Adresler</button>
-        <button class="portal-tab" type="button" data-view="support">Bize Ulaşın</button>
-        <button class="portal-tab" type="button" data-view="profile">Profil</button>
-      </nav>
+      <div id="order-status" role="status" aria-live="polite" hidden></div>
 
       <div id="portal-loading" class="portal-loading" hidden>Bilgiler yükleniyor...</div>
+
+      <section class="portal-section order-app" data-panel="shop" hidden><div id="order-flow"></div></section>
+      <section class="portal-section order-app" data-panel="cart" hidden><div id="cart-flow"></div></section>
 
       <section id="view-orders" class="portal-section" data-panel="orders">
         <div class="section-heading">
@@ -94,13 +109,13 @@
             <p class="eyebrow">Siparişlerim</p>
             <h2>Sipariş takibi</h2>
           </div>
-          <div class="segmented-control" aria-label="Sipariş filtresi">
-            <button class="is-active" type="button" data-order-filter="active">Aktif</button>
-            <button type="button" data-order-filter="history">Geçmiş</button>
-            <button type="button" data-order-filter="all">Tümü</button>
-          </div>
         </div>
         <div id="orders-list" class="order-list"></div>
+      </section>
+
+      <section id="view-history" class="portal-section" data-panel="history" hidden>
+        <div class="section-heading"><h2>Geçmiş siparişlerim</h2></div>
+        <div id="history-list" class="order-list"></div>
       </section>
 
       <section id="view-addresses" class="portal-section" data-panel="addresses" hidden>
@@ -145,11 +160,25 @@
           <div><dt>Telefon</dt><dd id="profile-phone">-</dd></div>
         </dl>
         <button id="profile-password-reset" class="button compact-button" type="button">Parola yenileme bağlantısı gönder</button>
+        <button id="profile-edit" class="button compact-button" type="button">Profil ve fatura bilgilerini düzenle</button>
+        <div class="profile-menu">
+          <button type="button" data-open-view="addresses">Adreslerim <span aria-hidden="true">›</span></button>
+          <button type="button" data-open-view="support">Bize Ulaşın <span aria-hidden="true">›</span></button>
+          <button type="button" data-open-view="history" id="profile-history">Geçmiş siparişlerim <span aria-hidden="true">›</span></button>
+          <a href="/alisveris-kosullari/">Ücretler, teslimat ve iade koşulları</a>
+          <a href="/privacy/">Gizlilik ve KVKK</a>
+          <a href="/hesap-silme/">Hesap ve veri silme</a>
+        </div>
       </section>
+      </div>
+      </div>
     </section>
   </main>
 
-  <footer><span>© 2026 Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi</span><a href="/privacy/">KVKK Aydınlatma Metni</a></footer>
-  <script src="/hesabim/hesabim.js?v=20261001-2" defer></script>
+  <footer><span>© 2026 Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi</span><a href="/alisveris-kosullari/">Satış, teslimat ve iade</a><a href="/destek/">Bize Ulaşın</a><a href="/privacy/">KVKK Aydınlatma Metni</a></footer>
+  <script src="/assets/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/hesabim/order-rules.js?v=20261106-1" defer></script>
+  <script src="/hesabim/order-flow.js?v=20261106-2" defer></script>
+  <script src="/hesabim/hesabim.js?v=20261106-2" defer></script>
 </body>
 </html>
