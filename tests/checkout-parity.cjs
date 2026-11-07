@@ -22,6 +22,7 @@ async function main() {
       }, { owner, theme });
       await page.route("**/*", async route => {
         const req = route.request(), url = new URL(req.url());
+        if (url.origin === base && url.pathname === "/assets/checkout-reference.json") return route.fulfill({ contentType: "application/json", body: '{"enabled":false}' });
         if (url.origin === base) return route.continue();
         calls.push({ path: url.pathname, hostname: url.hostname, body: req.postDataJSON() });
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });

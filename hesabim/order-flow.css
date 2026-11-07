@@ -10,6 +10,9 @@
 .product-photo-preview img:not(.app-icon) { width: 100%; height: 100%; object-fit: contain; }
 .product-photo-preview:disabled { opacity: 1; cursor: default; }
 .product-photo-remove { position: absolute; top: 6px; right: 6px; }
+.order-app .photo-select-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; align-self: flex-start; margin: 0; min-height: 48px; padding: 10px 20px; border: 1px solid #2e7068; border-radius: 6px; background: #2e7068; color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.order-app .photo-select-button:hover { background: #245c55; border-color: #245c55; }
+.photo-select-button .app-icon { width: 22px; height: 22px; filter: invert(1) !important; }
 .store-pickup { padding: 14px 0; border-block: 1px solid var(--line); }
 .order-app .store-pickup h3 { margin: 0 0 12px; }
 .link-field { position: relative; }

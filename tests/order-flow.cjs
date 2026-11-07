@@ -23,6 +23,7 @@ async function main() {
       await page.addInitScript((theme) => localStorage.setItem("magazadanal.web.theme.v1", theme), theme);
       await page.route("**/*", async (route) => {
         const req = route.request(); const url = new URL(req.url());
+        if (url.origin === base && url.pathname === "/assets/checkout-reference.json") return route.fulfill({ contentType: "application/json", body: '{"enabled":false}' });
         if (url.origin === base) return route.continue();
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co", "No unmocked external network");
@@ -60,10 +61,14 @@ async function main() {
       await page.locator("#portal-view").waitFor();
       await page.locator('[data-view="shop"]').click();
       await page.getByRole("button", { name: "Beymen", exact: true }).click();
+      assert.ok(await page.getByRole("button", { name: "Fotoğraf seç", exact: true }).isVisible());
       assert.equal(await page.locator('[name="product_name"], [name="alternative_size"], [name="alternative_color"]').count(), 0);
       await page.locator('[name="product_link"]').fill("https://example.com/product");
-      await page.locator('[name="product_photo"]').setInputFiles(path.join(__dirname, "../assets/magazadanal-logo.png"));
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByRole("button", { name: "Fotoğraf seç", exact: true }).click();
+      await (await chooser).setFiles(path.join(__dirname, "../assets/magazadanal-logo.png"));
       await page.waitForFunction(() => document.querySelector('.product-photo-preview img')?.src.startsWith('data:image/jpeg'));
+      assert.ok(await page.getByRole("button", { name: "Fotoğrafı değiştir", exact: true }).isVisible());
       await page.locator('[name="size"]').fill("M");
       await page.locator('[name="color"]').fill("Siyah");
       await page.locator('[name="estimated_price"]').fill("100");
@@ -91,6 +96,8 @@ async function main() {
       await page.getByRole("button", { name: "Uygula", exact: true }).click();
       await page.getByRole("button", { name: "Kaldır", exact: true }).waitFor();
       assert.equal(await page.locator('.choice-row input:disabled').count(), 1);
+      await page.getByRole("button", { name: "Öde ve onayla", exact: true }).click();
+      await page.getByText("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.", { exact: true }).waitFor();
       await page.getByRole("button", { name: /Ön Bilgilendirme, Mesafeli Sözleşme ve İade Koşulları/ }).click();
       await page.getByRole("button", { name: "Okudum ve kabul ediyorum", exact: true }).click();
       await page.locator('.legal-approval').nth(1).click();
@@ -111,6 +118,7 @@ async function main() {
       await page.locator('[data-view="cart"]').click();
       await page.getByRole("button", { name: "Aynı talebi kontrol et", exact: true }).click();
       await page.getByRole("heading", { name: "Sipariş talebi alındı", exact: true }).waitFor();
+      assert.equal(await page.locator("#order-status").isVisible(), false, "A successful order clears stale validation and retry errors");
       assert.equal(attempts.length, 2);
       assert.deepEqual(attempts[0], attempts[1], "Retries use identical immutable payload and request ID across reload");
       assert.equal(attempts[1].legal_acceptances.length, 4);
