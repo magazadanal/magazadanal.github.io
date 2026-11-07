@@ -203,6 +203,25 @@
       if (frozen || busy) throw Error("Gönderilmiş talebin sonucu kontrol ediliyor; içeriği değiştirme.");
       accepted = null; serviceAccepted = false; save(); updateCartCount();
     }
+    function resetDraft() {
+      draft = R.newDraft();
+      if (profile) draft.buyer = { full_name: profile.full_name, phone: profile.phone };
+      frozen = null; accepted = null; serviceAccepted = false; editing = null; stage = "stores"; checkout = false;
+      save(); updateCartCount(); message("");
+    }
+    function prepareDraftChange() {
+      if (busy) { message("Sipariş talebi işleniyor. Sonucun gelmesini bekle."); return false; }
+      if (!frozen) return true;
+      // Only an acknowledged order can release the immutable retry payload.
+      try { R.result(frozen.result, frozen.expectedAmount); }
+      catch {
+        host.openView("cart");
+        message("Önceki talebin sonucu henüz doğrulanmadı. Devam etmeden önce ‘Aynı talebi kontrol et’ düğmesini kullan.");
+        return false;
+      }
+      resetDraft();
+      return true;
+    }
     function updateCartCount() {
       document.querySelectorAll("[data-cart-count]").forEach((n) => { n.textContent = draft.items.length ? ` (${draft.items.length})` : ""; });
     }
@@ -211,7 +230,7 @@
       parent.replaceChildren(el("h2", title));
     }
     function beginProduct(name, fresh = false) {
-      if (frozen || busy) return message("Önce gönderilmiş sipariş talebini kontrol et.");
+      if (!prepareDraftChange()) return;
       status(notice, "");
       if (!fresh && editing) {
         if (editing.store !== name) {
@@ -232,7 +251,7 @@
         name.addEventListener("input", () => { draft.customStoreInput = name.value; save(); });
         const next = el("button", undefined, "button compact-button"); next.type = "submit"; next.append(icon("chevron_right")); next.title = "Bu mağazadan al"; next.setAttribute("aria-label", "Bu mağazadan al"); custom.append(next);
         custom.addEventListener("submit", event => {
-          event.preventDefault(); if (frozen || busy) return message("Önce gönderilmiş sipariş talebini kontrol et.");
+          event.preventDefault(); if (!prepareDraftChange()) return;
           const value = name.value.trim();
           if (!R.validStoreName(value)) return message("Geçerli bir mağaza adı gir (en fazla 100 karakter).");
           draft.selectedStores = [value]; draft.multiStore = false; draft.customStoreVisible = false; draft.customStoreInput = "";
@@ -240,13 +259,13 @@
         });
         productPanel.append(custom);
       } else productPanel.append(button("Farklı mağaza girişi", () => {
-        if (frozen || busy) return message("Önce gönderilmiş sipariş talebini kontrol et.");
+        if (!prepareDraftChange()) return;
         draft.customStoreVisible = true; save(); storePage(); productPanel.querySelector('[name="custom_store"]').focus();
       }, "button compact-button custom-store-toggle"));
       const grid = el("div", undefined, "store-grid");
       stores.forEach((name) => {
         const choice = button(name, () => {
-          if (frozen || busy) return message("Önce gönderilmiş sipariş talebini kontrol et.");
+          if (!prepareDraftChange()) return;
           if (draft.multiStore) {
             const selected = draft.selectedStores || [];
             if (!selected.includes(name) && selected.length >= 30) return message("En fazla 30 mağaza seçebilirsin.");
@@ -265,7 +284,7 @@
         beginProduct(store);
       }, "button primary-button"));
       const multi = button(draft.multiStore ? "Çoklu mağaza açık" : "Çoklu mağaza seç", () => {
-        if (frozen || busy) return message("Önce gönderilmiş sipariş talebini kontrol et.");
+        if (!prepareDraftChange()) return;
         const previous = draft.selectedStores?.at(-1) || editing?.store;
         draft.multiStore = !draft.multiStore; draft.selectedStores = draft.multiStore || !previous ? [] : [previous];
         mutate(); status(notice, ""); storePage();
@@ -583,7 +602,7 @@
           bankDetails(cartPanel, row.transfer_code);
         }
         cartPanel.append(button("Siparişi takip et", () => host.showOrder(row.order_id), "button primary-button"), button("Yeni sepet", () => {
-          draft = R.newDraft(); frozen = null; accepted = null; serviceAccepted = false; checkout = false; save(); updateCartCount(); cartPage();
+          if (prepareDraftChange()) cartPage();
         }));
       } else {
         cartPanel.append(el("p", "Sipariş talebinin sonucu bekleniyor. Tekrar kontrol aynı talep koduyla yapılır; yeni sipariş oluşturulmaz."));
