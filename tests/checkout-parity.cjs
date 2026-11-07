@@ -83,6 +83,7 @@ async function main() {
       await page.getByRole("button", { name: "Beymen", exact: true }).click();
       await page.locator('[name="product_link"]').waitFor();
       assert.equal(await page.locator('.product-photo-preview img').count(), 0);
+      assert.ok(await page.locator('.product-photo-frame').isHidden());
       assert.ok(await page.locator('[name="branch"]').isVisible());
       assert.equal(await page.locator('details').filter({hasText:'Bu şubeden al'}).count(), 0);
       await page.getByRole("button", { name: "Yapıştır", exact: true }).click();
@@ -104,12 +105,14 @@ async function main() {
       assert.ok(await page.locator("#order-status").evaluate(n => n.compareDocumentPosition(document.querySelector('[data-panel="shop"]')) & Node.DOCUMENT_POSITION_PRECEDING));
       await page.getByText("Bu şubeden al", { exact: true }).click();
       await page.getByRole("button", { name: "Mağaza konumu seç", exact: true }).click();
-      await page.getByRole("button", { name: "Haritayı aç", exact: true }).click();
+      assert.equal(await page.getByRole("button", { name: "Haritayı aç", exact: true }).count(), 0);
+      assert.ok(await page.locator('.app-map').isVisible());
       assert.equal(await page.locator('[name="map_search"]').inputValue(), "Beymen");
       await page.getByRole("button", { name: "Beymen Test Şube", exact: true }).click();
       await page.getByRole("button", { name: "Bu konumu kullan", exact: true }).click();
       await page.getByRole("button", { name: "Fotoğrafı kaldır", exact: true }).click();
       assert.equal(await page.locator('.product-photo-preview img[src^="data:image/jpeg"]').count(), 0);
+      assert.ok(await page.locator('.product-photo-frame').isHidden());
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.goto(base + "/");
       assert.ok(await page.locator("#home-sidebar").isVisible());

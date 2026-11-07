@@ -49,6 +49,8 @@ async function main() {
       const link=page.locator('#order-product-link');
       assert.equal(await page.locator('.product-photo-preview img').count(),0);
       assert.equal(await page.locator('.product-photo-preview').textContent(),'');
+      assert.ok(await page.locator('.product-photo-frame').isHidden());
+      assert.equal(await page.getByRole('link',{name:'Ücretler, teslimat ve satış koşulları',exact:true}).count(),0);
       assert.ok(await page.getByRole('button',{name:'Fotoğrafı kaldır',exact:true}).isHidden());
       assert.ok(await page.getByRole('textbox',{name:'Mağaza şubesi',exact:true}).isVisible());
       assert.equal(await page.locator('details').filter({hasText:'Bu şubeden al'}).count(),0);
@@ -97,13 +99,17 @@ async function main() {
         await page.reload(); await page.locator('#portal-view').waitFor();
         await page.getByRole('button',{name:'Sepete ekle',exact:true}).click();
         await page.locator('[name="saved_address"]').selectOption('30000000-0000-4000-8000-000000000001');
+        assert.equal(await page.locator('.recipient-only [name="address_line"], .recipient-only [name="district"]').count(),0);
+        assert.equal(await page.locator('.recipient-only button').count(),0);
+        await page.locator('[name="customer_name"]').fill('Other Recipient');
+        assert.equal(await page.locator('[name="saved_address"]').inputValue(),'30000000-0000-4000-8000-000000000001');
         await page.getByRole('button',{name:'Ödemeye geç',exact:true}).click();
         await page.getByRole('heading',{name:'Teslimat ve ödeme',exact:true}).waitFor();
         await page.locator('input[name="delivery"]').first().check();
         await page.locator('input[name="payment"]').check();
         await back.click();
         assert.ok(await page.getByRole('heading',{name:'Sepetim',exact:true}).isVisible());
-        assert.equal(await page.locator('[name="customer_name"]').inputValue(),'Test Customer');
+        assert.equal(await page.locator('[name="customer_name"]').inputValue(),'Other Recipient');
         await back.click();
         assert.ok(await page.getByRole('heading',{name:'Hangi mağazadan alalım?',exact:true}).isVisible());
         await page.getByRole('button',{name:'Sepet (1)',exact:true}).click();

@@ -83,8 +83,7 @@
   function choosePoint(initial, onChoose, storeName = "", searchPlaces = null) {
     const view = modal("Konum seç");
     const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : "") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
-    const start = button("Haritayı aç", () => {
-      start.remove();
+    function openMap() {
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
       let selected = R.point(initial?.latitude, initial?.longitude) ? [initial.latitude, initial.longitude] : null;
       const map = L.map(box).setView(selected || [41.072, 28.99], selected ? 16 : 12);
@@ -147,8 +146,8 @@
       }, "button primary-button"));
       requestAnimationFrame(() => map.invalidateSize());
       view.dialog.addEventListener("close", () => map.remove(), { once: true });
-    }, "button primary-button");
-    view.body.append(info, start);
+    }
+    openMap(); view.body.append(info);
   }
   window.createMAOrderFlow = function (host) {
     let stores = [], countries = [], legal = null, owner = null, profile = null, addresses = [], runtime = null, currentView = "shop";
@@ -273,7 +272,6 @@
       });
       multi.setAttribute("aria-pressed", String(!!draft.multiStore)); actions.append(multi); productPanel.append(actions);
       if (draft.items.length) productPanel.append(button(`Sepete git (${draft.items.length})`, () => host.openView("cart"), "button primary-button app-sticky"));
-      const fees = el("a", "Ücretler, teslimat ve satış koşulları"); fees.href = "/alisveris-kosullari/"; productPanel.append(fees);
     }
     function productPage() {
       formBase(productPanel, editing.store);
@@ -286,6 +284,7 @@
       const preview = button("", () => editing.image_data_base64 && showPhoto(editing.image_data_base64), "product-photo-preview"); preview.setAttribute("aria-label", "Ürün fotoğrafını büyüt");
       const removePhoto = button("", () => { editing.image_data_base64 = null; photo.value = ""; mutate(); refreshPhoto(); }, "app-close product-photo-remove"); removePhoto.append(icon("close")); removePhoto.setAttribute("aria-label", "Fotoğrafı kaldır"); removePhoto.title = "Fotoğrafı kaldır";
       const refreshPhoto = () => {
+        photoFrame.hidden = !editing.image_data_base64;
         preview.replaceChildren();
         if (editing.image_data_base64) { const img = el("img"); img.src = `data:image/jpeg;base64,${editing.image_data_base64}`; img.alt = "Seçilen ürün fotoğrafını büyüt"; preview.replaceChildren(img); }
         preview.disabled = !editing.image_data_base64; removePhoto.hidden = !editing.image_data_base64;
@@ -375,13 +374,17 @@
         } catch (e) { message(e.message); }
       });
     }
-    function addressForm(parent, address, onChange) {
+    function addressForm(parent, address, onChange, { recipientOnly = false } = {}) {
       const inputs = {};
       const grid = el("div", undefined, "app-form-grid"); parent.append(grid);
       inputs.customer_name = field(grid, "Alıcı adı soyadı", "customer_name", address.customer_name ?? profile?.full_name, "text", { max: 100 });
       if (address.customer_name === undefined) address.customer_name = inputs.customer_name.value;
       if (address.customer_phone === undefined) address.customer_phone = profile?.phone || "";
       phoneField(grid, "Alıcı cep telefonu", "customer_phone", address.customer_phone, value => { address.customer_phone = value; onChange(); });
+      if (recipientOnly) {
+        inputs.customer_name.addEventListener("input", () => { address.customer_name = inputs.customer_name.value; onChange(); });
+        return;
+      }
       inputs.district = field(grid, "İlçe", "district", address.district || "", "select", { values: [{ label: "İlçe seç", value: "" }, ...R.districts] });
       for (const [key, label] of [["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) inputs[key] = field(grid, label, key, address[key], "text", { max: 500 });
       const locationButton = button("", () => choosePoint(address, (p) => { Object.assign(address, p); label(); onChange(); }));
@@ -428,7 +431,9 @@
           mutate(); cartPage();
         });
       }
-      addressForm(cartPanel, draft.address, () => { draft.addressID = null; mutate(); });
+      const savedAddressSelected = addresses.some(address => address.id === draft.addressID);
+      const addressFields = el("div", undefined, savedAddressSelected ? "recipient-only" : "delivery-address-fields"); cartPanel.append(addressFields);
+      addressForm(addressFields, draft.address, () => { if (!savedAddressSelected) draft.addressID = null; mutate(); }, { recipientOnly: savedAddressSelected });
       cartPanel.append(button("Ödemeye geç", () => {
         try { R.validate(draft, stores); checkout = true; save(); cartPage(); window.scrollTo(0, 0); }
         catch (e) { message(e.message); }

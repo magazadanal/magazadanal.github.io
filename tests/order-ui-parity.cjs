@@ -69,7 +69,7 @@ async function main() {
         await page.getByText("Bu şubeden al", { exact: true }).click();
         await page.locator('[name="branch"]').fill("Test Şube");
         await page.getByRole("button", { name: "Mağaza konumu seç", exact: true }).click();
-        await page.getByRole("button", { name: "Haritayı aç", exact: true }).click();
+        assert.ok(await page.locator('.app-map').isVisible());
         await page.locator(".app-map").click({ position: { x: 130, y: 160 } });
         await page.getByRole("button", { name: "Bu konumu kullan", exact: true }).click();
       }
