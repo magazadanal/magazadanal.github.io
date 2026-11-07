@@ -40,8 +40,8 @@ async function main() {
         if (url.pathname.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
         else if (url.pathname === "/auth/v1/token") data = { access_token: "mock", refresh_token: "mock", expires_in: 3600, user: { id: owner, email: "test@example.invalid" } };
         else if (url.pathname === "/rest/v1/profiles") data = [{ id: owner, full_name: "Test Buyer", phone: "+905300000000", role: "customer", is_active: true }];
-        else if (url.pathname === "/rest/v1/customer_addresses" || url.pathname.endsWith("list_support_tickets_v3") || url.pathname.endsWith("list_order_activity")) data = [];
-        else if (url.pathname === "/rest/v1/orders") data = created ? [{ id: orderID, order_no: "000123", status: "delivered", created_at: new Date().toISOString(), customer_total: 460, order_items: [] }] : [];
+        else if (url.pathname === "/rest/v1/customer_addresses" || ["list_support_tickets_v3", "list_order_activity", "get_order_delivery_code", "get_order_courier_position"].some(name => url.pathname.endsWith(name))) data = [];
+        else if (url.pathname === "/rest/v1/orders") data = created ? [{ id: orderID, order_no: "000123", status: scenario === "existing" ? "delivered" : "payment_waiting", created_at: new Date().toISOString(), customer_total: 460, order_items: [] }] : [];
         else if (url.pathname.endsWith("reserve_customer_checkout_reference")) {
           const id = req.postDataJSON().p_client_request_id; reservations.push(id);
           started(); if (scenario === "late-result") await delayed;
