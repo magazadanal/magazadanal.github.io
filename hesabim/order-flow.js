@@ -153,6 +153,7 @@
     let stores = [], countries = [], legal = null, owner = null, profile = null, addresses = [], runtime = null, currentView = "shop";
     let draft = R.newDraft(), stage = "stores", editing = null, checkout = false, frozen = null, busy = false, loaded = false, epoch = 0;
     let accepted = null, serviceAccepted = false, profileAcks = [];
+    let referenceEnabled = false, referenceLoading = false, referenceError = "", referenceAttempt = null, draftLease = null;
     const productPanel = document.getElementById("order-flow");
     const cartPanel = document.getElementById("cart-flow");
     const notice = document.getElementById("order-status");
@@ -181,10 +182,10 @@
       country.addEventListener("change", changed); number.addEventListener("input", changed);
       return { value: () => R.joinedPhone(country.value, number.value), country, number };
     }
-    function bankDetails(parent, transferCode = null) {
+    function bankDetails(parent, transferCode = null, pendingText = "Sipariş onaylandığında oluşturulacak") {
       const details = el("dl", undefined, "bank-details");
       for (const [title, value] of [["IBAN", "TR78 0011 1000 0000 0168 3796 58"], ["Ticari unvan", "Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi"], ["Açıklama kodu", transferCode]]) {
-        const line = el("div"), text = el("dd", value || "Sipariş onaylandığında oluşturulacak"); line.append(el("dt", title), text);
+        const line = el("div"), text = el("dd", value || pendingText); line.append(el("dt", title), text);
         if (value) { const copy = button("Kopyala", async () => { try { await navigator.clipboard.writeText(value); copy.textContent = "Kopyalandı"; } catch { message("Kopyalanamadı. Bilgiyi seçerek kopyalayabilirsin."); } }, "text-button"); line.append(copy); }
         details.append(line);
       } parent.append(details);
@@ -204,6 +205,7 @@
       accepted = null; serviceAccepted = false; save(); updateCartCount();
     }
     function resetDraft() {
+      releaseDraftLease(); referenceAttempt = null; referenceLoading = false; referenceError = "";
       draft = R.newDraft();
       if (profile) draft.buyer = { full_name: profile.full_name, phone: profile.phone };
       frozen = null; accepted = null; serviceAccepted = false; editing = null; stage = "stores"; checkout = false;
@@ -221,6 +223,52 @@
       }
       resetDraft();
       return true;
+    }
+    function releaseDraftLease() { draftLease?.release(); draftLease = null; }
+    async function lockDraft(version, customer) {
+      if (!navigator.locks?.request) throw Error("Güvenli sipariş için tarayıcını güncelle veya uygulamayı kullan.");
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (version !== epoch || customer !== owner || frozen) throw Error("Sipariş taslağı değişti.");
+        if (draftLease?.owner === customer && draftLease.requestID === draft.requestID) return;
+        releaseDraftLease();
+        const requestID = draft.requestID;
+        const acquired = await new Promise((resolve, reject) => {
+          navigator.locks.request(`magazadanal.checkout.${customer}.${requestID}`, { ifAvailable: true }, async lock => {
+            if (!lock) { resolve(false); return; }
+            if (version !== epoch || customer !== owner || draft.requestID !== requestID || frozen) { resolve(false); return; }
+            await new Promise(release => { draftLease = { owner: customer, requestID, release }; resolve(true); });
+          }).catch(reject);
+        });
+        if (version !== epoch || customer !== owner || frozen) throw Error("Sipariş taslağı değişti.");
+        if (acquired) return;
+        // Duplicated tabs clone sessionStorage: fork only an unsubmitted draft.
+        draft.requestID = crypto.randomUUID(); draft.createdAt = new Date().toISOString();
+        delete draft.checkoutReference; accepted = null; serviceAccepted = false;
+        if (!save()) throw Error("Yeni taslak kaydedilemedi. Sipariş gönderilmedi.");
+      }
+      throw Error("Sipariş taslağı başka bir sekmede açık. Diğer sekmeyi kontrol et.");
+    }
+    async function reserveReference() {
+      if (!referenceEnabled || referenceLoading || frozen || !owner) return;
+      const customer = owner, version = epoch, attempt = Symbol();
+      referenceAttempt = attempt; referenceLoading = true; referenceError = "";
+      try {
+        await lockDraft(version, customer);
+        const requestID = draft.requestID;
+        const row = R.reservation((await rpc("reserve_customer_checkout_reference", { p_client_request_id: requestID }))?.[0]);
+        if (referenceAttempt !== attempt || version !== epoch || owner !== customer || draft.requestID !== requestID || frozen) return;
+        if (row.result === "already_created") { resetDraft(); await host.showOrder(row.order_id); return; }
+        draft.checkoutReference = { owner: customer, requestID, code: row.reference_code };
+        accepted = null; serviceAccepted = false;
+        if (!save()) { delete draft.checkoutReference; throw Error("Açıklama kodu kaydedilemedi. Sipariş gönderilmedi."); }
+      } catch (error) {
+        if (referenceAttempt === attempt && version === epoch && owner === customer) referenceError = error.message || "Açıklama kodu alınamadı. Yeniden dene.";
+      } finally {
+        if (referenceAttempt === attempt && version === epoch && owner === customer) {
+          referenceLoading = false;
+          if (currentView === "cart" && checkout) cartPage();
+        }
+      }
     }
     function updateCartCount() {
       document.querySelectorAll("[data-cart-count]").forEach((n) => { n.textContent = draft.items.length ? ` (${draft.items.length})` : ""; });
@@ -297,12 +345,18 @@
       showBack();
       const form = el("form", undefined, "app-form"); form.noValidate = true;
       const inputs = {};
-      const photo = field(form, "Ürün fotoğrafı", "product_photo", "", "file", { required: false });
+      const photoField = el("div", undefined, "app-field photo-field");
+      const photo = el("input"); photo.type = "file"; photo.name = "product_photo"; photo.hidden = true; photo.setAttribute("aria-label", "Ürün fotoğrafı");
       photo.accept = "image/jpeg,image/png,image/webp";
+      const photoTitle = el("span", "Fotoğraf seç");
+      const choosePhoto = button("", () => photo.click(), "button photo-select-button");
+      choosePhoto.append(icon("image"), photoTitle);
+      photoField.append(el("span", "Ürün fotoğrafı"), photo, choosePhoto); form.append(photoField);
       const photoFrame = el("div", undefined, "product-photo-frame");
       const preview = button("", () => editing.image_data_base64 && showPhoto(editing.image_data_base64), "product-photo-preview"); preview.setAttribute("aria-label", "Ürün fotoğrafını büyüt");
       const removePhoto = button("", () => { editing.image_data_base64 = null; photo.value = ""; mutate(); refreshPhoto(); }, "app-close product-photo-remove"); removePhoto.append(icon("close")); removePhoto.setAttribute("aria-label", "Fotoğrafı kaldır"); removePhoto.title = "Fotoğrafı kaldır";
       const refreshPhoto = () => {
+        photoTitle.textContent = editing.image_data_base64 ? "Fotoğrafı değiştir" : "Fotoğraf seç";
         photoFrame.hidden = !editing.image_data_base64;
         preview.replaceChildren();
         if (editing.image_data_base64) { const img = el("img"); img.src = `data:image/jpeg;base64,${editing.image_data_base64}`; img.alt = "Seçilen ürün fotoğrafını büyüt"; preview.replaceChildren(img); }
@@ -311,10 +365,11 @@
       photoFrame.append(preview, removePhoto); refreshPhoto(); form.append(photoFrame);
       photo.addEventListener("change", async () => {
         const version = epoch; const target = editing;
-        photo.disabled = true; submit.disabled = true;
+        if (!photo.files[0]) return;
+        photo.disabled = true; choosePhoto.disabled = true; submit.disabled = true;
         try { const value = await image(photo.files[0]); if (version !== epoch || target !== editing) return; editing.image_data_base64 = value; mutate(); refreshPhoto(); }
         catch (e) { message(e.message); }
-        finally { photo.disabled = false; submit.disabled = false; }
+        finally { photo.disabled = false; choosePhoto.disabled = false; submit.disabled = false; }
       });
       inputs.product_link = field(form, "Ürün linki", "product_link", editing.product_link, "url", { max: 2048, required: false });
       const paste = button("Yapıştır", async () => {
@@ -459,6 +514,12 @@
       }, "button primary-button"));
     }
     function paymentPage() {
+      const codeReady = !referenceEnabled || (!!R.referenceCode(draft, owner) && draftLease?.owner === owner && draftLease.requestID === draft.requestID);
+      if (referenceEnabled && !codeReady) {
+        cartPanel.append(el("p", referenceError || "Açıklama kodu hazırlanıyor…", referenceError ? "status status-error" : "muted"));
+        if (referenceError) cartPanel.append(button("Açıklama kodunu yeniden al", () => { referenceError = ""; void reserveReference(); cartPage(); }));
+        else if (!referenceLoading && currentView === "cart" && !document.getElementById("portal-view").hidden) void reserveReference();
+      }
       const delivery = el("fieldset", undefined, "app-options"); delivery.append(el("legend", "Teslimat seçeneği"));
       for (const express of [true, false]) {
         const label = el("label", undefined, "choice-row"); const input = el("input"); input.type = "radio"; input.name = "delivery"; input.checked = draft.express === express;
@@ -475,7 +536,7 @@
       const cardText = el("div"); cardText.append(el("strong", "Banka / kredi kartı"), el("small", "Banka entegrasyonu tamamlanınca açılacak.")); card.append(cardInput, cardText); payments.append(bank, card);
       cartPanel.append(payments);
       if (draft.payment === "bank_transfer") {
-        bankDetails(cartPanel);
+        bankDetails(cartPanel, referenceEnabled ? R.referenceCode(draft, owner) : null, referenceEnabled ? "Açıklama kodu doğrulanıyor" : undefined);
         cartPanel.append(el("p", "Para göndermeden önce siparişini onayla ve sunucunun verdiği açıklama kodunu kullan. Sipariş onayı ödeme alındığı anlamına gelmez.", "muted"));
       }
       const summary = el("dl", undefined, "price-summary");
@@ -503,7 +564,7 @@
       const agreements = el("section", undefined, "checkout-agreements");
       agreements.append(el("h3", "Sipariş sözleşmeleri"), el("p", "Ürünler, tutarlar ve teslimat bilgileri bu siparişe özeldir. Üç belgeyi tek ekranda okuyup onaylayın; kabul edilen metin ve sipariş bilgileri değişmez kayıt olarak saklanır.", "muted"), el("p", "Satıcı ve tüketici faturasını düzenleyen: Mağazadan AL Dijital Servisler Lojistik Anonim Şirketi"));
       function approval(title, approved, action) {
-        const row = button("", action, "legal-approval"); row.setAttribute("aria-pressed", String(approved));
+        const row = button("", action, "legal-approval"); row.setAttribute("aria-pressed", String(approved)); row.disabled = !codeReady;
         const check = el("span", undefined, "approval-indicator"); if (approved) check.append(icon("check"));
         row.append(check, el("span", title)); if (approved) row.append(el("span", "Onaylandı", "approval-state"));
         agreements.append(row);
@@ -542,7 +603,7 @@
       agreements.append(el("p", "Bu ayrı onay, kuryenin mağazaya hareketiyle hizmetin başlamasını ve yalnız müşteri kaynaklı sonraki iptalde gösterilen hizmet ve teslimat bedelinin iade edilmeyeceğini kaydeder.", "muted"));
       cartPanel.append(agreements);
       const submit = button("Öde ve onayla", submitOrder, "button primary-button");
-      submit.disabled = !allowed(); cartPanel.append(submit);
+      submit.disabled = !allowed() || !codeReady; cartPanel.append(submit);
       if (!allowed()) cartPanel.append(el("p", "Şu anda yeni sipariş alınamıyor. Sepetindeki bilgiler korunuyor.", "status status-error"));
       cartPanel.append(button("Sepeti ve adresi düzenle", () => { checkout = false; save(); cartPage(); }, "text-button"));
     }
@@ -573,12 +634,14 @@
     }
     async function submitOrder() {
       if (busy || frozen) return;
+      message("");
       const version = epoch;
       busy = true;
       showBack();
       productPanel.inert = true; cartPanel.inert = true;
       try {
         if (!await host.checkRuntime() || !allowed()) throw Error("Yeni sipariş alımı şu anda kapalı.");
+        if (referenceEnabled && (!R.referenceCode(draft, owner) || draftLease?.requestID !== draft.requestID || draftLease?.owner !== owner)) throw Error("Açıklama kodunu yeniden doğrula.");
         if (typeof draft.express !== "boolean" || draft.payment !== "bank_transfer") throw Error("Teslimat ve ödeme seçeneği seç.");
         if (!accepted || !serviceAccepted) throw Error("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.");
         const snapshot = R.clone(draft);
@@ -586,7 +649,7 @@
         if (JSON.stringify(docs) !== JSON.stringify(accepted)) throw Error("Sipariş bilgileri değişti. Sözleşmeleri yeniden onayla.");
         if (!await ensureProfileLegal() || version !== epoch) return;
         if (JSON.stringify(snapshot) !== JSON.stringify(draft)) throw Error("Sipariş bilgileri değişti; yeniden kontrol edip onayla.");
-        frozen = { payload: R.payload(snapshot, docs), expectedAmount: R.totals(snapshot.items, snapshot.express, snapshot.promotion?.percent || 0).total, result: null };
+        frozen = { payload: R.payload(snapshot, docs), expectedAmount: R.totals(snapshot.items, snapshot.express, snapshot.promotion?.percent || 0).total, expectedReferenceCode: referenceEnabled ? R.referenceCode(snapshot, owner) : null, result: null };
         if (!save()) { frozen = null; throw Error("Sepet bu sekmeye sığmadığı için sipariş gönderilmedi. Fotoğrafları azaltıp yeniden dene."); }
         cartPage(); await sendFrozen(version);
       } catch (e) { message(e.message || "Sipariş gönderilemedi."); }
@@ -596,9 +659,9 @@
       if (frozen.result) {
         const row = frozen.result;
         cartPanel.append(el("h3", "Sipariş talebi alındı"));
-        if (row.amountChanged) cartPanel.append(el("p", "Sunucu tutarı sepet tahmininden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste.", "status status-error"));
+        if (row.amountChanged || row.referenceChanged) cartPanel.append(el("p", row.referenceChanged ? "Sunucunun açıklama kodu beklenenden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste." : "Sunucu tutarı sepet tahmininden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste.", "status status-error"));
         cartPanel.append(el("p", `Sunucunun doğruladığı tutar: ${money(row.amount)}`), el("p", "Ödeme henüz doğrulanmadı."));
-        if (!row.amountChanged) {
+        if (!row.amountChanged && !row.referenceChanged) {
           bankDetails(cartPanel, row.transfer_code);
         }
         cartPanel.append(button("Siparişi takip et", () => host.showOrder(row.order_id), "button primary-button"), button("Yeni sepet", () => {
@@ -614,11 +677,14 @@
     }
     async function sendFrozen(version) {
       try {
+        message("");
         if (!save()) throw Error("Sipariş talebi bu sekmede kaydedilemediği için gönderilmedi. Sayfayı kapatma; tarayıcı depolamasını kontrol et.");
         if (!await host.checkRuntime() || !allowed()) throw Error("Sipariş güvenlik kontrolü doğrulanamadı. Talep korunuyor.");
         const data = await rpc("create_customer_order_v7", frozen.payload);
         if (version !== epoch) return;
-        frozen.result = R.result(data?.[0], frozen.expectedAmount); frozen.payload = null; draft.items = []; draft.address = {}; delete draft.editing; save(); updateCartCount(); cartPage(); host.refresh();
+        frozen.result = R.result(data?.[0], frozen.expectedAmount);
+        frozen.result.referenceChanged = !!frozen.expectedReferenceCode && frozen.result.transfer_code !== frozen.expectedReferenceCode;
+        frozen.payload = null; draft.items = []; draft.address = {}; delete draft.editing; save(); updateCartCount(); message(""); cartPage(); host.refresh();
       } catch (e) { if (version === epoch) message(e.message || "Sonuç alınamadı. Aynı talebi kontrol et."); }
     }
     async function addressEditor(address = null) {
@@ -674,8 +740,9 @@
     }
     async function init() {
       try {
-        const [c, l, p] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v6.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" })]);
-        if (!c.ok || !l.ok || !p.ok) throw Error();
+        const [c, l, p, settings] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v6.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" }), fetch("/assets/checkout-reference.json", { credentials: "omit", cache: "no-store" })]);
+        if (!c.ok || !l.ok || !p.ok || !settings.ok) throw Error();
+        referenceEnabled = (await settings.json()).enabled === true;
         stores = (await c.json()).stores; legal = await l.json(); countries = (await p.json()).countries; loaded = true; render();
       } catch { productPanel.replaceChildren(el("p", "Sipariş içeriği yüklenemedi. Sayfayı yeniden aç.", "status status-error")); }
     }
@@ -689,6 +756,7 @@
       sync(data) {
         const changed = owner !== data.owner;
         if (changed) {
+          releaseDraftLease(); referenceAttempt = null; referenceLoading = false; referenceError = "";
           epoch++; document.querySelectorAll(".app-dialog").forEach((n) => n.close());
           owner = data.owner; draft = R.newDraft(); frozen = null; accepted = null; serviceAccepted = false; stage = "stores"; editing = null; checkout = false;
           if (owner) try {

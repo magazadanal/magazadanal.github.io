@@ -120,7 +120,7 @@
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const t = totals(draft.items, draft.express, draft.promotion?.percent || 0);
     const values = {
-      REQUEST_ID: draft.requestID, CREATED_AT: draft.createdAt,
+      REQUEST_ID: referenceCode(draft, draft.checkoutReference?.owner) || draft.requestID, CREATED_AT: draft.createdAt,
       CUSTOMER_NAME: draft.buyer?.full_name || draft.address.customer_name, CUSTOMER_EMAIL: email,
       CUSTOMER_PHONE: draft.buyer?.phone || draft.address.customer_phone, DELIVERY_ADDRESS: addressSummary(draft.address),
       PRODUCT_LINES: draft.items.map((item, i) => `${i + 1}. ${item.store} / ${item.product_name}: ${item.estimated_price} TL`).join("\n"),
@@ -150,6 +150,18 @@
   function newDraft() {
     return { requestID: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(), items: [], selectedStores: [], multiStore: false, address: {}, express: null, payment: null, selectionVersion: 1, promotion: null };
   }
+  function referenceCode(draft, owner) {
+    const reference = draft.checkoutReference;
+    return UUID.test(owner || "") && reference?.owner === owner && reference.requestID === draft.requestID
+      && typeof reference.code === "string" && /^[0-9]{6,19}$/.test(reference.code) ? reference.code : null;
+  }
+  function reservation(row) {
+    if (row?.authorized !== true || !["reserved", "already_created"].includes(row.result)
+      || typeof row.reference_code !== "string" || !/^[0-9]{6,19}$/.test(row.reference_code) || (row.result === "already_created" && !UUID.test(row.order_id || ""))) {
+      throw Error("Açıklama kodu doğrulanamadı. Para göndermeden önce yeniden dene.");
+    }
+    return row;
+  }
   function result(row, expectedAmount) {
     if (row?.authorized !== true || !["success", "already_created"].includes(row.result) || !UUID.test(row.order_id || "")
       || !Number.isFinite(row.amount) || row.amount <= 0 || typeof row.transfer_code !== "string" || !row.transfer_code.trim()) {
@@ -157,5 +169,5 @@
     }
     return { ...row, amountChanged: Math.abs(row.amount - expectedAmount) > 0.005 };
   }
-  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, result };
+  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result };
 });

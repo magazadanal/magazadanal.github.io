@@ -16,7 +16,9 @@ async function main() {
       page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
       await page.addInitScript(theme => localStorage.setItem("magazadanal.web.theme.v1", theme), theme);
       await page.route("**/*", async route => {
-        const url = new URL(route.request().url()); if (url.origin === base) return route.continue();
+        const url = new URL(route.request().url());
+        if (url.origin === base && url.pathname === "/assets/checkout-reference.json") return route.fulfill({ contentType: "application/json", body: '{"enabled":false}' });
+        if (url.origin === base) return route.continue();
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co"); let data;
         if (url.pathname.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];

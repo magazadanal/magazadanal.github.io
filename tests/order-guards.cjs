@@ -29,7 +29,9 @@ async function main() {
         }
       }, { owner, data, scenario });
       await page.route("**/*", async (route) => {
-        const url = new URL(route.request().url()); if (url.origin === base) return route.continue();
+        const url = new URL(route.request().url());
+        if (url.origin === base && url.pathname === "/assets/checkout-reference.json") return route.fulfill({ contentType: "application/json", body: '{"enabled":false}' });
+        if (url.origin === base) return route.continue();
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co");
         const p = url.pathname; const body = route.request().postDataJSON(); let result;

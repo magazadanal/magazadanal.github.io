@@ -5,6 +5,21 @@ const path = require("node:path");
 const R = require("../hesabim/order-rules.js");
 const legal = require("../assets/legal-v6.json");
 const { stores } = require("../assets/order-catalog.json");
+test("short reference belongs to one owner/draft and does not change the idempotency UUID", async () => {
+  const d = draft(), owner = crypto.randomUUID(), originalID = d.requestID;
+  d.checkoutReference = { owner, requestID: originalID, code: "000123" };
+  assert.equal(R.referenceCode(d, owner), "000123"); assert.equal(R.referenceCode(d, crypto.randomUUID()), null);
+  const docs = await R.documents(d, legal, "test@example.invalid", stores);
+  assert.ok(docs.every(doc => doc.content.includes("000123") && !doc.content.includes(originalID)));
+  assert.equal(R.payload(d, docs).p_client_request_id, originalID);
+  d.requestID = crypto.randomUUID(); assert.equal(R.referenceCode(d, owner), null);
+});
+test("reservation must be authorized, numeric and identify existing orders", () => {
+  assert.equal(R.reservation({ authorized: true, result: "reserved", reference_code: "000123" }).reference_code, "000123");
+  for (const row of [{ authorized: false, result: "reserved", reference_code: "000123" },
+    { authorized: true, result: "reserved", reference_code: "123<script>" },
+    { authorized: true, result: "already_created", reference_code: "000123" }]) assert.throws(() => R.reservation(row));
+});
 function item(extra = {}) {
   return { client_item_id: crypto.randomUUID(), store: "Beymen", branch: "Test Şube", product_name: "Test ürün",
     size: "M", color: "Siyah", estimated_price: 100, product_link: "https://example.com/product", image_data_base64: null,
