@@ -1024,7 +1024,7 @@
   });
   document.getElementById("profile-edit").addEventListener("click", () => orderFlow.editProfile());
   function syncOrderFlow() {
-    orderFlow?.sync({ owner: state.session?.user?.id || null, profile: state.profile, addresses: state.addresses, runtime: state.runtime });
+    orderFlow?.sync({ owner: state.session?.user?.id || null, profile: state.profile, addresses: state.addresses, runtime: state.runtime, orders: state.orders });
   }
   function restoreView(freshLogin = false) {
     if (!state.session) return;

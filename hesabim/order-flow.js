@@ -211,6 +211,17 @@
       frozen = null; accepted = null; serviceAccepted = false; editing = null; stage = "stores"; checkout = false;
       save(); updateCartCount(); message("");
     }
+    function reconcileOrders(orders) {
+      if (busy || !frozen?.result || !Array.isArray(orders)) return false;
+      let confirmed;
+      try { confirmed = R.result(frozen.result, frozen.expectedAmount); }
+      catch { return false; }
+      const order = orders.find(row => row.id === confirmed.order_id);
+      // Only an authoritative terminal status releases the saved receipt.
+      if (!order || !["cancelled", "delivered"].includes(order.status)) return false;
+      resetDraft();
+      return true;
+    }
     function prepareDraftChange() {
       if (busy) { message("Sipariş talebi işleniyor. Sonucun gelmesini bekle."); return false; }
       if (!frozen) return true;
@@ -772,7 +783,8 @@
           const buyer = { full_name: profile.full_name, phone: profile.phone };
           if (JSON.stringify(draft.buyer) !== JSON.stringify(buyer)) { draft.buyer = buyer; accepted = null; serviceAccepted = false; save(); }
         }
-        if (changed) render(); else renderAddresses();
+        const reconciled = reconcileOrders(data.orders);
+        if (changed || reconciled) render(); else renderAddresses();
       },
       show(view) { currentView = view; showBack(); if (!loaded) return; if (view === "shop") { if (stage === "product" && editing) productPage(); else storePage(); } if (view === "cart") cartPage(); },
       clear() {
