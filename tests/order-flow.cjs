@@ -70,14 +70,17 @@ async function main() {
       await page.getByText("Bu şubeden al", { exact: true }).click();
       await page.locator('[name="branch"]').fill("Test Şube");
       await page.getByRole("button", { name: "Mağaza konumu seç", exact: true }).click();
-      await page.getByRole("button", { name: "Haritayı aç", exact: true }).click();
+      assert.ok(await page.locator('.app-map').isVisible());
       await page.locator(".app-map").click({ position: { x: 130, y: 160 } });
       await page.getByRole("button", { name: "Bu konumu kullan" }).click();
       await page.screenshot({ path: path.join(output, `product-${width}-${theme}.png`), fullPage: true });
       await page.getByRole("button", { name: "Sepete ekle", exact: true }).click();
       await page.locator('[name="saved_address"]').selectOption("30000000-0000-4000-8000-000000000001");
+      assert.equal(await page.locator('[name="address_line"], [name="building_no"], [name="district"], [name="directions"]').count(), 0);
+      assert.equal(await page.getByRole('button',{name:'Teslimat konumu seçildi · Değiştir',exact:true}).count(),0);
       await page.locator('[name="customer_name"]').fill("Other Recipient");
       await page.locator('[name="customer_phone_number"]').fill("5300000000");
+      assert.equal(await page.locator('[name="saved_address"]').inputValue(),'30000000-0000-4000-8000-000000000001');
       await page.screenshot({ path: path.join(output, `cart-${width}-${theme}.png`), fullPage: true });
       await page.getByRole("button", { name: "Ödemeye geç", exact: true }).click();
       assert.equal(await page.locator('.choice-row input:checked').count(), 0);

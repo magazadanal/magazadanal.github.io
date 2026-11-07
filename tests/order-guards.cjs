@@ -83,7 +83,7 @@ async function main() {
         await page.getByRole("dialog").locator('[name="district"]').selectOption("Şişli");
         for (const [key, value] of Object.entries({ neighborhood: "Test Mahallesi", address_line: "Sokak", building_no: "1", building_name: "Bina 1", directions: "Kapı" })) await page.getByRole("dialog").locator(`[name="${key}"]`).fill(value);
         await page.getByRole("button", { name: "Teslimat konumu seç", exact: true }).click();
-        await page.getByRole("button", { name: "Haritayı aç", exact: true }).click();
+        assert.ok(await page.locator('.app-map').isVisible());
         await page.locator(".app-map").click({ position: { x: 130, y: 160 } });
         await page.getByRole("button", { name: "Bu konumu kullan", exact: true }).click();
         await page.getByRole("dialog").getByRole("button", { name: "Kaydet", exact: true }).click();

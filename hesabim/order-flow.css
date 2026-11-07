@@ -161,3 +161,46 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   .price-summary > div { gap: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+
+/* Keep controls touch-sized while reducing vertical space between them. */
+.portal-header { padding: 6px 0; }
+.portal-header .brand { width: 108px; height: 72px; }
+.portal-page { padding-top: 16px; padding-bottom: 24px; }
+.portal-section { padding-bottom: 16px; }
+.section-heading { margin: 4px 0 12px; }
+.order-app h2 { margin: 8px 0 16px; }
+.order-app h3 { margin-top: 16px; }
+.order-app .button { margin-block: 8px; }
+.app-form { gap: 8px; }
+.app-form-grid { gap: 6px 12px; }
+.app-field { margin-block: 4px; gap: 3px; }
+.app-field input, .app-field select, .app-field textarea { padding: 8px 10px; min-height: 44px; }
+.app-field.link-field input { padding-right: 95px; }
+.app-field textarea { min-height: 70px; }
+.product-photo-frame { width: min(240px, 100%); margin-block: 8px; }
+.store-pickup { padding-block: 10px; }
+.recipient-only .app-form-grid > .phone-field { grid-column: auto; }
+.recipient-only .phone-field { grid-template-columns: 90px minmax(0, 1fr); gap: 8px; }
+.app-options { margin-block: 14px; }
+.choice-row { padding: 10px; margin-block: 6px; min-height: 44px; }
+.choice-row:has(input:checked) { padding: 9px; }
+.bank-details { gap: 8px; padding-block: 10px; margin-block: 12px; }
+.price-summary { margin-block: 14px; padding-block: 10px; }
+.checkout-agreements { padding-block: 10px; margin-block: 14px; }
+.legal-approval { min-height: 48px; padding-block: 8px; }
+.profile-menu { margin-block: 14px; }
+.profile-menu button, .profile-menu a { padding-block: 10px; min-height: 44px; }
+.profile-details div { padding-block: 8px; }
+.saved-address { padding-block: 10px; }
+.app-dialog-header, .app-dialog-body { padding: 12px 16px; }
+.app-dialog-footer { padding: 10px 16px; }
+.app-dialog-body > .muted { font-size: 12px; line-height: 1.4; margin-block: 8px; }
+.app-map { height: min(280px, 42dvh); margin-block: 10px; }
+@media (min-width: 900px) {
+  .portal-tabs, .has-product-back .product-back { top: clamp(16px, calc(100dvh - 320px), 112px); }
+}
+@media (max-width: 540px) {
+  .portal-page { padding-bottom: 96px; }
+  .app-form-grid { gap: 4px; }
+  .recipient-only .app-form-grid > .phone-field { grid-column: 1 / -1; }
+}
