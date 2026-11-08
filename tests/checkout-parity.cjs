@@ -118,6 +118,19 @@ async function main() {
       await page.goto(base + "/");
       assert.ok(await page.locator("#home-sidebar").isVisible());
       assert.equal(await page.locator("#home-account-link").isVisible(), false);
+      if (width >= 900) {
+        for (const height of [900,425,360]) {
+          await page.setViewportSize({width:1215,height});
+          await page.evaluate(() => scrollTo(0,0));
+          const header = await page.locator('header').boundingBox(), menu = await page.locator('#home-sidebar').boundingBox();
+          assert.ok(menu.y >= header.y + header.height + 12, 'Homepage menu stays below the white header even in a short window');
+          assert.ok(menu.y + menu.height <= height - 12, 'Short-window menu remains scrollable within the viewport');
+          await page.evaluate(() => scrollTo(0,450));
+          assert.ok(Math.abs((await page.locator('#home-sidebar').boundingBox()).y - menu.y) < 1, 'Homepage navigation remains fixed');
+          if (height === 425) { await page.evaluate(() => scrollTo(0,0)); await page.screenshot({path:path.join(output,`home-short-${theme}.png`)}); }
+        }
+        await page.setViewportSize({width,height:900});
+      }
       await page.locator('#home-sidebar [href="/hesabim/?view=shop"]').click();
       await page.locator("#portal-view").waitFor();
       assert.equal(await page.locator("#auth-view").isVisible(), false);
