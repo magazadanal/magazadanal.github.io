@@ -9,7 +9,7 @@
   const query = new URLSearchParams(window.location.search);
   const tokenHash = query.get("token_hash");
   const validLink = query.getAll("token_hash").length === 1
-    && /^[a-f0-9]{64}$/i.test(tokenHash || "")
+    && /^[a-f0-9]{56}$/i.test(tokenHash || "")
     && query.getAll("type").length === 1 && query.get("type") === "signup"
     && !query.has("error") && !query.has("error_description");
   let inFlight = false;

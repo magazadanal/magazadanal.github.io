@@ -2,10 +2,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {chromium} = require('playwright');
+const {createHash} = require('node:crypto');
 const base = process.env.SITE_TEST_URL || 'http://127.0.0.1:8774';
 assert.ok(['localhost', '127.0.0.1'].includes(new URL(base).hostname));
 const output = process.env.SITE_SCREENSHOT_DIR || '/private/tmp/ma-email-confirmation-browser-20261108';
-const token = 'a'.repeat(64);
+const token = createHash('sha224').update('synthetic@example.invalid' + '123456').digest('hex');
 const user = {id:'10000000-0000-4000-8000-000000000001',email_confirmed_at:'2026-11-08T20:00:00Z'};
 const otherSession = JSON.stringify({user:{id:'20000000-0000-4000-8000-000000000002'},accessToken:'synthetic-other-account',refreshToken:'synthetic-other-refresh'});
 async function main() {
