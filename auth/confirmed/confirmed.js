@@ -6,6 +6,7 @@
   const statusElement = document.getElementById("confirmation-status");
   const confirmButton = document.getElementById("confirm-email");
   const accountLink = document.getElementById("account-link");
+  const automatic = statusElement.dataset.autoConfirm === "true";
   const query = new URLSearchParams(window.location.search);
   const tokenHash = query.get("token_hash");
   const validLink = query.getAll("token_hash").length === 1
@@ -14,6 +15,7 @@
     && !query.has("error") && !query.has("error_description");
   let inFlight = false;
   let completed = false;
+  let autoStarted = false;
 
   window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -78,6 +80,7 @@
       );
       accountLink.hidden = false;
     } catch {
+      confirmButton.hidden = false;
       showStatus(
         "Doğrulama sonucu alınamadı.",
         "İnternet bağlantını kontrol edip yeniden dene. Daha önce doğruladıysan hesabına giriş yapabilirsin.",
@@ -86,14 +89,29 @@
     } finally {
       inFlight = false;
       confirmButton.disabled = false;
-      confirmButton.textContent = "E-postamı doğrula";
+      confirmButton.textContent = automatic ? "Yeniden dene" : "E-postamı doğrula";
     }
   }
 
-  // Opening or scanning the email link must never consume its one-time token.
+  function startWhenVisible() {
+    if (autoStarted || document.visibilityState !== "visible" || document.prerendering) return;
+    autoStarted = true;
+    document.removeEventListener("visibilitychange", startWhenVisible);
+    document.removeEventListener("prerenderingchange", startWhenVisible);
+    void confirmEmail();
+  }
+
   if (validLink) {
-    confirmButton.hidden = false;
     confirmButton.addEventListener("click", confirmEmail);
+    if (automatic) {
+      showStatus("E-posta adresin doğrulanıyor...", "Lütfen bekle.", "pending");
+      // Hidden/prerendered pages wait; visible JavaScript-capable scanners can still verify.
+      document.addEventListener("visibilitychange", startWhenVisible);
+      document.addEventListener("prerenderingchange", startWhenVisible);
+      startWhenVisible();
+    } else {
+      confirmButton.hidden = false;
+    }
   } else {
     showStatus("Bu doğrulama bağlantısı kullanılamıyor.",
       "Bağlantı eksik veya geçersiz. E-postandaki bağlantıyı yeniden aç veya yeni bir doğrulama e-postası iste.", "error");

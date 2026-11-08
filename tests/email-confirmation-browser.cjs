@@ -39,35 +39,43 @@ async function main() {
       });
       const open = async (route = 'verify-email') => {
         await page.goto(`${base}/auth/${route}/?token_hash=${token}&type=signup#discarded`);
-        await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).waitFor();
+        if (route === 'confirmed') {
+          await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).waitFor();
+        } else {
+          const expected=mode==='success' ? 'E-posta adresin doğrulandı.' :
+            mode==='expired' ? 'Bu doğrulama bağlantısı kullanılamıyor.' : 'Doğrulama sonucu alınamadı.';
+          await page.getByText(expected,{exact:true}).waitFor();
+        }
         assert.equal(page.url(), `${base}/auth/${route}/`);
-        assert.equal(await page.getByRole('link',{name:'Web’de giriş yap',exact:true}).isVisible(), false);
       };
-      await open(); assert.equal(requests.length,0,'Link scanning/loading must not consume the token');
-      await page.screenshot({path:path.join(output,`pending-${width}-${theme}.png`),fullPage:true});
-      await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).dblclick();
-      await page.getByText('E-posta adresin doğrulandı.',{exact:true}).waitFor();
+      await page.request.get(`${base}/auth/verify-email/?token_hash=${token}&type=signup`);
+      await page.request.head(`${base}/auth/verify-email/?token_hash=${token}&type=signup`);
+      assert.equal(requests.length,0,'Plain GET/HEAD must not verify; JavaScript scanners remain a risk');
+      await open();
       assert.equal(requests.length,1);
+      assert.equal(await page.getByRole('button',{name:'Yeniden dene',exact:true}).isVisible(),false);
       assert.equal(await page.getByRole('link',{name:'Web’de giriş yap',exact:true}).isVisible(), true);
       assert.equal(await page.evaluate(() => sessionStorage.length),1);
       assert.equal(await page.evaluate(() => sessionStorage.getItem('magazadanal.web.session.v1')),otherSession);
       assert.equal(await page.evaluate(() => localStorage.getItem('magazadanal.web.session.v1')),null);
       await page.screenshot({path:path.join(output,`success-${width}-${theme}.png`),fullPage:true});
-      mode = 'expired'; await open(); assert.equal(requests.length,1);
-      await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).click();
-      await page.getByText('Bu doğrulama bağlantısı kullanılamıyor.',{exact:true}).waitFor();
+      mode = 'expired'; await open(); assert.equal(requests.length,2);
       assert.equal(await page.getByRole('link',{name:'Web’de giriş yap',exact:true}).isVisible(), false);
       mode = 'unconfirmed'; await open('confirmed');
+      assert.equal(requests.length,2,'Legacy route must still require an explicit click');
       await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).click();
       await page.getByText('Doğrulama sonucu alınamadı.',{exact:true}).waitFor();
       assert.equal(await page.getByRole('link',{name:'Web’de giriş yap',exact:true}).isVisible(), false);
       mode = 'offline'; await open();
-      await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).click();
-      await page.getByText('Doğrulama sonucu alınamadı.',{exact:true}).waitFor();
-      assert.equal(await page.getByRole('button',{name:'E-postamı doğrula',exact:true}).isEnabled(), true);
+      assert.equal(requests.length,4);
+      assert.equal(await page.getByRole('button',{name:'Yeniden dene',exact:true}).isEnabled(), true);
+      mode='success'; await page.getByRole('button',{name:'Yeniden dene',exact:true}).dblclick();
+      await page.getByText('E-posta adresin doğrulandı.',{exact:true}).waitFor();
+      assert.equal(requests.length,5);
+      assert.equal(await page.evaluate(() => sessionStorage.getItem('magazadanal.web.session.v1')),otherSession);
       await page.goto(`${base}/auth/verify-email/?token_hash=${token}&type=recovery`);
       await page.getByText('Bu doğrulama bağlantısı kullanılamıyor.',{exact:true}).waitFor();
-      assert.equal(requests.length,4);
+      assert.equal(requests.length,5);
       assert.deepEqual(errors, []);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       const response = await page.request.get(`${base}/auth/verify-email/`);
@@ -78,6 +86,6 @@ async function main() {
     }
   } finally { await browser.close(); }
   await fs.writeFile(path.join(output,'verification.json'), JSON.stringify({results,syntheticOnly:true,upstreamAPIsMocked:true,liveWrites:false},null,2)+'\n');
-  console.log('PASS: confirmation gesture, server result, other-account session preservation, duplicate/network/expired guards, old links, secret stripping and responsive light/dark UI; synthetic local requests only.');
+  console.log('PASS: automatic browser confirmation, explicit retry/legacy route, server result, other-account session preservation, duplicate/network/expired guards, GET/HEAD behavior, secret stripping and responsive light/dark UI; synthetic local requests only. JavaScript-capable scanners can still verify.');
 }
 main().catch(e => {console.error(e); process.exitCode = 1;});
