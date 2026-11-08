@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 const R = require("../hesabim/order-rules.js");
-const legal = require("../assets/legal-v7.json");
+const legal = require("../assets/legal-v8.json");
 const catalog = require("../assets/order-catalog.json");
 const base = process.env.SITE_TEST_URL || "http://127.0.0.1:8766";
 assert.ok(["127.0.0.1", "localhost"].includes(new URL(base).hostname));
