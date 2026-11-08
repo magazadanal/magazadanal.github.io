@@ -388,6 +388,11 @@ p, li { color: var(--muted); }
 
 .auth-page { max-width: 560px; }
 
+.confirmation-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.confirmation-actions .button { min-width: 180px; min-height: 48px; font: inherit; font-weight: 700; text-align: center; border-radius: 6px; cursor: pointer; }
+.confirmation-actions .button:disabled { opacity: 0.65; cursor: wait; }
+.confirmation-actions .button:focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; }
+
 .eyebrow {
   margin: 0 0 8px;
   color: var(--teal);

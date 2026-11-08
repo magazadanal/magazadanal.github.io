@@ -1052,7 +1052,7 @@
     submit.disabled = true;
     try {
       if (!await enforceRuntimeStatus()) return;
-      const data = await api("/auth/v1/signup?redirect_to=https%3A%2F%2Fmagazadanal.com%2Fauth%2Fconfirmed%2F", { method: "POST", token: null, body: { email, password, data: { full_name: name, phone } } });
+      const data = await api("/auth/v1/signup?redirect_to=https%3A%2F%2Fmagazadanal.com%2Fauth%2Fverify-email%2F", { method: "POST", token: null, body: { email, password, data: { full_name: name, phone } } });
       const session = sessionFromResponse(data);
       document.getElementById("signup-password").value = ""; document.getElementById("signup-confirm").value = "";
       if (session) {
