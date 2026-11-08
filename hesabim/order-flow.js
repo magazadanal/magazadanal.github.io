@@ -429,12 +429,23 @@
       branchTitle.id = "store-pickup-title"; branch.setAttribute("aria-labelledby", branchTitle.id); branch.append(branchTitle);
       inputs.branch = field(branch, "Mağaza şubesi", "branch", editing.branch, "text", { max: 200 });
       const storeName = editing.store;
-      const locationButton = button("", () => choosePoint({ latitude: editing.store_latitude, longitude: editing.store_longitude }, (p) => {
-        editing.store_latitude = p.latitude; editing.store_longitude = p.longitude; mutate(); locationLabel();
-      }, storeName, query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } })));
-      const locationLabel = () => { locationButton.textContent = R.point(editing.store_latitude, editing.store_longitude) ? "Konum seçildi · Değiştir" : "Mağaza konumu seç"; };
-      locationLabel(); branch.append(locationButton); form.append(branch);
-      inputs.branch.addEventListener("input", () => { delete editing.store_latitude; delete editing.store_longitude; locationLabel(); });
+      const locationValue = el("p", undefined, "pickup-location-value"); locationValue.setAttribute("aria-live", "polite");
+      const locationButton = button("", () => {
+        const target = editing, version = epoch;
+        choosePoint({ latitude: target.store_latitude, longitude: target.store_longitude }, (p) => {
+          if (version !== epoch || editing !== target || busy || frozen) return;
+          target.store_latitude = p.latitude; target.store_longitude = p.longitude; mutate(); locationLabel(); message("");
+        }, storeName, query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } }));
+      });
+      const locationLabel = () => {
+        const selected = R.point(editing.store_latitude, editing.store_longitude);
+        locationButton.textContent = selected ? "Konum seçildi · Değiştir" : "Mağaza konumu seç";
+        locationButton.classList.toggle("is-selected", selected);
+        locationButton.setAttribute("aria-describedby", "pickup-location-value");
+        locationValue.id = "pickup-location-value"; locationValue.hidden = !selected;
+        locationValue.textContent = selected ? `${editing.store_latitude.toFixed(5)}, ${editing.store_longitude.toFixed(5)}` : "";
+      };
+      locationLabel(); branch.append(locationButton, locationValue); form.append(branch);
       const grid = el("div", undefined, "app-form-grid"); form.append(grid);
       for (const [key, label] of [["size", "Beden / boyut"], ["color", "Renk"]]) inputs[key] = field(grid, label, key, editing[key], "text", { max: 200 });
       inputs.estimated_price = field(form, "Tahmini ürün fiyatı (TL)", "estimated_price", editing.estimated_price, "number", { min: 1, maxNumber: 1000000 }); inputs.estimated_price.step = "1";
@@ -751,7 +762,7 @@
     }
     async function init() {
       try {
-        const [c, l, p, settings] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v6.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" }), fetch("/assets/checkout-reference.json", { credentials: "omit", cache: "no-store" })]);
+        const [c, l, p, settings] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v7.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" }), fetch("/assets/checkout-reference.json", { credentials: "omit", cache: "no-store" })]);
         if (!c.ok || !l.ok || !p.ok || !settings.ok) throw Error();
         referenceEnabled = (await settings.json()).enabled === true;
         stores = (await c.json()).stores; legal = await l.json(); countries = (await p.json()).countries; loaded = true; render();

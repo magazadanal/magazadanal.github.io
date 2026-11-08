@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const legal = require("../assets/legal-v6.json");
+const legal = require("../assets/legal-v7.json");
 const base = process.env.SITE_TEST_URL || "http://127.0.0.1:8766";
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
 const output = process.env.SITE_SCREENSHOT_DIR || "/private/tmp/ma-web-order-20261105";
