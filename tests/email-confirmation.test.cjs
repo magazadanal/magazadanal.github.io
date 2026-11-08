@@ -11,29 +11,84 @@ const script = fs.readFileSync(path.join(root, 'auth/confirmed/confirmed.js'), '
 const token = createHash('sha224').update('synthetic@example.invalid' + '123456').digest('hex');
 const query = `?token_hash=${token}&type=signup`;
 const verified = {user:{id:'10000000-0000-4000-8000-000000000001', email_confirmed_at:'2026-11-08T20:00:00Z'}, access_token:'synthetic-discarded'};
-function harness(search = query, respond = async () => ({ok:true, status:200, json:async () => verified})) {
-  const node = () => ({hidden:true, disabled:false, textContent:'', children:[], events:{},
+function harness(search = query, respond = async () => ({ok:true, status:200, json:async () => verified}),
+  {automatic = false, visible = true, prerendering = false} = {}) {
+  const node = () => ({hidden:true, disabled:false, textContent:'', children:[], events:{}, dataset:{},
     replaceChildren(...children) { this.children = children; },
     append(...children) { this.children.push(...children); },
     addEventListener(name, callback) { this.events[name] = callback; }});
   const status = node(), button = node(), account = node(), requests = [], history = [];
+  status.dataset.autoConfirm = String(automatic);
   const nodes = {'confirmation-status':status, 'confirm-email':button, 'account-link':account};
   const storage = new Proxy({}, {get() { throw Error('Authentication state must not be stored or read'); }});
+  const events = {};
+  const document = {title:'Confirmation', getElementById:id => nodes[id], createElement:node,
+    visibilityState:visible ? 'visible' : 'hidden', prerendering,
+    addEventListener(name, callback) { events[name] = callback; },
+    removeEventListener(name, callback) { if (events[name] === callback) delete events[name]; }};
   vm.runInNewContext(script, {
-    URLSearchParams, document:{title:'Confirmation', getElementById:id => nodes[id], createElement:node},
+    URLSearchParams, document,
     window:{location:{search, pathname:'/auth/verify-email/'}, history:{replaceState:(...args) => history.push(args)}},
     localStorage:storage, sessionStorage:storage,
     fetch:async (...args) => { requests.push(args); return respond(...args); },
   });
-  return {status,button,account,requests,history,click:() => button.events.click?.(), text:() => status.children.map(n => n.textContent).join(' ')};
+  return {status,button,account,requests,history,document,events,
+    flush:() => new Promise(resolve => setImmediate(resolve)),
+    click:() => button.events.click?.(), text:() => status.children.map(n => n.textContent).join(' ')};
 }
 
-test('opening or scanning a valid link performs no verification and clears query/fragment', () => {
+test('legacy link loading performs no verification and clears query/fragment', () => {
   const h = harness();
   assert.equal(h.requests.length, 0);
   assert.equal(h.button.hidden, false);
   assert.equal(h.account.hidden, true);
   assert.equal(h.history[0][2], '/auth/verify-email/');
+});
+
+test('automatic page verifies once when visible, without a second click or replacing an account', async () => {
+  const h = harness(query, undefined, {automatic:true});
+  assert.equal(h.requests.length,1); assert.equal(h.button.hidden,true);
+  assert.equal(h.history[0][2],'/auth/verify-email/');
+  await h.flush(); assert.match(h.text(),/adresin doğrulandı/);
+  assert.equal(h.account.hidden,false); await h.click(); assert.equal(h.requests.length,1);
+  assert.deepEqual(Object.keys(h.events),[]);
+});
+
+test('automatic page waits for visibility and prerender completion, then starts only once', async () => {
+  for (const settings of [{automatic:true,visible:false},{automatic:true,prerendering:true}]) {
+    const h = harness(query, undefined, settings);
+    assert.equal(h.requests.length,0);
+    h.events.visibilitychange(); h.events.prerenderingchange(); assert.equal(h.requests.length,0);
+    h.document.visibilityState='visible'; h.document.prerendering=false;
+    const changed=h.events.visibilitychange; changed(); changed();
+    await h.flush(); assert.equal(h.requests.length,1); assert.match(h.text(),/adresin doğrulandı/);
+    assert.deepEqual(Object.keys(h.events),[]);
+  }
+});
+
+test('automatic verification failure needs an explicit retry, not focus changes or timers', async () => {
+  let calls=0;
+  const h=harness(query,async()=>{
+    calls++; if(calls===1) throw Error('offline');
+    return {ok:true,status:200,json:async()=>verified};
+  },{automatic:true});
+  await h.flush(); assert.equal(h.requests.length,1); assert.equal(h.button.hidden,false);
+  assert.equal(h.button.textContent,'Yeniden dene'); assert.equal(h.account.hidden,true);
+  assert.deepEqual(Object.keys(h.events),[]);
+  await h.click(); assert.equal(h.requests.length,2); assert.equal(h.account.hidden,false);
+});
+
+test('automatic mode cannot bypass malformed tokens, wrong types or server confirmation', async () => {
+  for (const search of ['', '?type=signup', query+'&token_hash='+token, query+'&type=signup',
+    '?token_hash='+token+'&type=recovery', '?token_hash=short&type=signup',query+'&error=denied']) {
+    const h=harness(search,undefined,{automatic:true}); await h.flush();
+    assert.equal(h.requests.length,0); assert.equal(h.button.hidden,true); assert.equal(h.account.hidden,true);
+  }
+  for (const response of [{ok:false,status:403}, {ok:true,status:200,json:async()=>({user:{id:verified.user.id}})}]) {
+    const h=harness(query,async()=>response,{automatic:true}); await h.flush();
+    assert.equal(h.requests.length,1); assert.equal(h.account.hidden,true);
+    assert.doesNotMatch(h.text(),/adresin doğrulandı/);
+  }
 });
 
 test('provider SHA-224 contract accepts 56 hex characters, not assumed SHA-256 or arbitrary lengths', async () => {
@@ -111,7 +166,8 @@ test('old/new web pages share the confirmation controller; new email path is out
   for (const route of ['auth/confirmed', 'auth/verify-email']) {
     const html = fs.readFileSync(path.join(root, route, 'index.html'), 'utf8');
     assert.match(html, /id="confirm-email"[^>]*hidden/);
-    assert.match(html, /confirmed\.js\?v=20261109-2/);
+    assert.match(html, /confirmed\.js\?v=20261109-3/);
+    assert.equal(html.includes('data-auto-confirm="true"'),route==='auth/verify-email');
     assert.match(html, /name="referrer" content="no-referrer"/);
     assert.match(html, /noindex, nofollow, noarchive/);
     assert.doesNotMatch(html, /http-equiv="refresh"|autofocus|onclick=/);
