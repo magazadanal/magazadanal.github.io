@@ -3,10 +3,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const test = require('node:test');
+const {createHash} = require('node:crypto');
 
 const root = path.resolve(__dirname, '..');
 const script = fs.readFileSync(path.join(root, 'auth/confirmed/confirmed.js'), 'utf8');
-const token = 'a'.repeat(64);
+// Supabase Auth GenerateTokenHash uses SHA-224(email + OTP), not SHA-256.
+const token = createHash('sha224').update('synthetic@example.invalid' + '123456').digest('hex');
 const query = `?token_hash=${token}&type=signup`;
 const verified = {user:{id:'10000000-0000-4000-8000-000000000001', email_confirmed_at:'2026-11-08T20:00:00Z'}, access_token:'synthetic-discarded'};
 function harness(search = query, respond = async () => ({ok:true, status:200, json:async () => verified})) {
@@ -32,6 +34,19 @@ test('opening or scanning a valid link performs no verification and clears query
   assert.equal(h.button.hidden, false);
   assert.equal(h.account.hidden, true);
   assert.equal(h.history[0][2], '/auth/verify-email/');
+});
+
+test('provider SHA-224 contract accepts 56 hex characters, not assumed SHA-256 or arbitrary lengths', async () => {
+  assert.equal(token.length,56);
+  for (const value of [token, token.toUpperCase()]) {
+    const h=harness(`?token_hash=${value}&type=signup`);
+    assert.equal(h.button.hidden,false); assert.equal(h.requests.length,0);
+  }
+  for (const value of ['a'.repeat(55),'a'.repeat(57),'a'.repeat(64),'z'.repeat(56),
+    'a'.repeat(56)+'\n','a'.repeat(1000),'pkce_'+token]) {
+    const h=harness(`?token_hash=${encodeURIComponent(value)}&type=signup`);
+    assert.equal(h.button.hidden,true); await h.click(); assert.equal(h.requests.length,0);
+  }
 });
 
 test('only a button action plus a verified server user produces success; session is not saved', async () => {
@@ -96,7 +111,7 @@ test('old/new web pages share the confirmation controller; new email path is out
   for (const route of ['auth/confirmed', 'auth/verify-email']) {
     const html = fs.readFileSync(path.join(root, route, 'index.html'), 'utf8');
     assert.match(html, /id="confirm-email"[^>]*hidden/);
-    assert.match(html, /confirmed\.js\?v=20261108-1/);
+    assert.match(html, /confirmed\.js\?v=20261109-2/);
     assert.match(html, /name="referrer" content="no-referrer"/);
     assert.match(html, /noindex, nofollow, noarchive/);
     assert.doesNotMatch(html, /http-equiv="refresh"|autofocus|onclick=/);
