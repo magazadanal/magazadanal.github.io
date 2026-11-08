@@ -44,6 +44,24 @@ for (const [name, bad] of Object.entries({ "unselected store": { store: "" }, "z
   "missing photo/link": { product_link: "" }, "missing coordinates": { store_latitude: null }, "infinite coordinates": { store_latitude: Infinity }, "color number": { color: "123" }, "SVG as photo": { image_data_base64: "PHN2Zz4=" } })) {
   test(`reject ${name}`, () => assert.throws(() => R.validateItem(item(bad), stores)));
 }
+test("missing product fields identify only the field that needs completing", () => {
+  for (const [key, label] of [["branch", "Mağaza şubesi"], ["product_name", "Ürün"], ["size", "Beden / boyut"], ["color", "Renk"]]) {
+    assert.throws(() => R.validateItem(item({[key]:""})), {message:`${label} alanını doldur.`});
+    assert.throws(() => R.validateItem(item({[key]:"X".repeat(201)})), {message:`${label} en fazla 200 karakter olabilir.`});
+  }
+});
+test("pickup names preserve searched branches and label unnamed map pins truthfully", () => {
+  assert.equal(R.pickupBranch("Beymen", "  Beymen Test Şube  "), "Beymen Test Şube");
+  assert.equal(R.pickupBranch("Beymen"), "Beymen · Haritadan seçilen konum");
+  assert.equal(R.pickupBranch("Beymen", null), "Beymen · Haritadan seçilen konum");
+  assert.equal(R.pickupBranch("Beymen", "X".repeat(250)).length, 200);
+});
+test("missing delivery fields identify only the unfilled address field", () => {
+  for (const [key, label] of [["customer_name", "Alıcı adı soyadı"], ["customer_phone", "Alıcı cep telefonu"], ["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) {
+    const address = {...draft().address, [key]:""};
+    assert.throws(() => R.validateAddress(address), {message:`${label} alanını doldur.`});
+  }
+});
 test("delivery point, district and address completeness are mandatory", () => {
   assert.equal(R.validate(draft(), stores), true);
   for (const update of [{ latitude: null }, { district: "Kadıköy" }, { building_no: "" }, { directions: "" }, { customer_phone: "123" }]) {

@@ -46,33 +46,53 @@ async function main() {
       const dialog = page.getByRole('dialog', {name:'Konum seç'});
       await dialog.getByRole('button', {name:'Beymen Test Şube', exact:true}).click();
       await dialog.getByRole('button', {name:'Bu konumu kullan', exact:true}).click();
+      assert.equal(await page.locator('[name="branch"]').inputValue(), 'Beymen Test Şube', 'Search selection fills the required branch automatically');
       await page.locator('[name="branch"]').fill('Beymen Test Şube kat 1');
       assert.match(await page.locator('.store-pickup button').textContent(), /Konum seçildi/, 'Editing a branch description must not silently erase the chosen map point');
       assert.equal(await page.locator('.store-pickup .is-selected').count(), 1);
-      assert.match(await page.locator('.pickup-location-value').textContent(), /41\.07000.*28\.99000/);
+      assert.equal(await page.locator('.pickup-location-value').count(), 0);
       await page.reload();
       await page.locator('#portal-view').waitFor();
       assert.equal(await page.locator('[name="branch"]').inputValue(), 'Beymen Test Şube kat 1');
-      assert.match(await page.locator('.pickup-location-value').textContent(), /41\.07000.*28\.99000/);
+      assert.equal(await page.locator('.pickup-location-value').count(), 0);
+      await page.evaluate(owner => {
+        const key = `magazadanal.web.draft.v1.${owner}`, stored = JSON.parse(sessionStorage.getItem(key));
+        stored.draft.editing.branch = ''; sessionStorage.setItem(key, JSON.stringify(stored));
+      }, owner);
+      await page.reload(); await page.locator('#portal-view').waitFor();
+      assert.equal(await page.locator('[name="branch"]').inputValue(), 'Beymen · Haritadan seçilen konum', 'Old drafts with coordinates and a blank branch recover without losing the chosen point');
+      await page.getByRole('button', {name:'Konum seçildi · Değiştir',exact:true}).click();
+      await page.locator('.app-map').click({position:{x:130,y:160}});
+      await page.getByRole('button', {name:'Bu konumu kullan',exact:true}).click();
+      assert.equal(await page.locator('[name="branch"]').inputValue(), 'Beymen · Haritadan seçilen konum');
+      assert.equal(await page.locator('.pickup-location-value').count(), 0);
+      for (const [name, label, value] of [['size','Beden / boyut','M'],['color','Renk','Siyah']]) {
+        await page.locator(`[name="${name}"]`).fill('');
+        await page.getByRole('button', {name:'Sepete ekle',exact:true}).click();
+        assert.equal(await page.locator('#order-status').innerText(), `${label} alanını doldur.`);
+        await page.locator(`[name="${name}"]`).fill(value);
+        assert.ok(await page.locator('#order-status').isHidden(), 'Correcting the field clears the stale error');
+      }
       await page.screenshot({path:path.join(output, `selected-${width}-${theme}.png`), fullPage:true});
       await page.getByRole('button', {name:'Sepete ekle', exact:true}).click();
       await page.getByRole('heading', {name:'Sepetim', exact:true}).waitFor();
       assert.equal(await page.locator('.cart-item').count(), 1);
       await page.getByRole('button', {name:'Düzenle', exact:true}).click();
-      assert.match(await page.locator('.pickup-location-value').textContent(), /41\.07000.*28\.99000/);
+      assert.equal(await page.locator('.pickup-location-value').count(), 0);
+      assert.equal(await page.locator('[name="branch"]').inputValue(), 'Beymen · Haritadan seçilen konum');
       await page.getByRole('button', {name:'Geri', exact:true}).click();
       await page.getByRole('button', {name:'Mango', exact:true}).click();
       assert.equal(await page.locator('[name="branch"]').inputValue(), '');
       assert.equal(await page.locator('.store-pickup .is-selected').count(), 0);
-      assert.equal(await page.locator('.pickup-location-value').isHidden(), true);
+      assert.equal(await page.locator('.pickup-location-value').count(), 0);
       await page.getByRole('button', {name:/^(Sepete ekle|Değişiklikleri kaydet)$/}).click();
-      assert.ok(await page.locator('#order-status').isVisible());
+      assert.equal(await page.locator('#order-status').innerText(), 'Mağaza şubesi alanını doldur.');
       assert.deepEqual(errors, []);
       assert.deepEqual(writes, []);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await context.close();
     }
   } finally { await browser.close(); }
-  console.log('PASS: selected pickup location survives branch edit/reload/cart edit, is visibly filled, and is cleared only when switching store. Three local mocked viewports, no server writes.');
+  console.log('PASS: search/pin selection fills the branch, old blank-branch drafts recover, coordinates stay hidden, only missing fields are named, cart advances and store switching clears the point. Three local mocked viewports, no server writes.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

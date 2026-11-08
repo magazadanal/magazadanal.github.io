@@ -86,19 +86,20 @@
     function openMap() {
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
       let selected = R.point(initial?.latitude, initial?.longitude) ? [initial.latitude, initial.longitude] : null;
+      let selectedName = "";
       const map = L.map(box).setView(selected || [41.072, 28.99], selected ? 16 : 12);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19, referrerPolicy: "strict-origin", attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
       }).addTo(map);
       let marker;
       const location = el("p", "Haritada teslim alma / teslimat noktasına dokun.", "muted"); view.body.append(location);
-      const set = (lat, lng) => {
+      const set = (lat, lng, name = "") => {
         if (!R.point(lat, lng)) return;
-        selected = [lat, lng];
+        selected = [lat, lng]; selectedName = name;
         if (marker) marker.setLatLng(selected); else marker = L.circleMarker(selected, { radius: 10, color: "#13675b", fillColor: "#2f9c85", fillOpacity: 1 }).addTo(map);
         location.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
       };
-      if (selected) set(...selected);
+      if (selected) set(...selected, initial?.name || "");
       map.on("click", (e) => set(e.latlng.lat, e.latlng.lng));
       const searchForm = el("form", undefined, "map-search-form"); searchForm.noValidate = true;
       searchForm.hidden = !storeName;
@@ -126,7 +127,7 @@
           if (!view.dialog.isConnected) return;
           results.replaceChildren();
           if (!rows.length) results.append(el("p", "Sonuç bulunamadı. Şube adını ekleyebilir veya haritadan seçebilirsin.", "muted"));
-          for (const row of rows) results.append(button(row.name, () => { set(row.latitude, row.longitude); map.setView([row.latitude, row.longitude], 17); }, "map-search-result"));
+          for (const row of rows) results.append(button(row.name, () => { set(row.latitude, row.longitude, row.name); map.setView([row.latitude, row.longitude], 17); }, "map-search-result"));
           if (rows.length && !selected) map.setView([rows[0].latitude, rows[0].longitude], 13);
         } catch (error) { if (view.dialog.isConnected) results.replaceChildren(el("p", error.message || "Yer araması açılamadı; haritadan seçebilirsin.", "muted")); }
         finally { searching = false; find.disabled = false; }
@@ -142,7 +143,7 @@
       });
       view.footer.append(locate, button("Bu konumu kullan", () => {
         if (!selected) return status(location, "Önce haritadan bir nokta seç.", true);
-        onChoose({ latitude: selected[0], longitude: selected[1] }); view.dialog.close();
+        onChoose({ latitude: selected[0], longitude: selected[1], ...(storeName ? { name: R.pickupBranch(storeName, selectedName) } : {}) }); view.dialog.close();
       }, "button primary-button"));
       requestAnimationFrame(() => map.invalidateSize());
       view.dialog.addEventListener("close", () => map.remove(), { once: true });
@@ -352,6 +353,9 @@
       if (draft.items.length) productPanel.append(button(`Sepete git (${draft.items.length})`, () => host.openView("cart"), "button primary-button app-sticky"));
     }
     function productPage() {
+      if (R.point(editing.store_latitude, editing.store_longitude) && !String(editing.branch || "").trim()) {
+        editing.branch = R.pickupBranch(editing.store); save();
+      }
       formBase(productPanel, editing.store);
       showBack();
       const form = el("form", undefined, "app-form"); form.noValidate = true;
@@ -378,7 +382,7 @@
         const version = epoch; const target = editing;
         if (!photo.files[0]) return;
         photo.disabled = true; choosePhoto.disabled = true; submit.disabled = true;
-        try { const value = await image(photo.files[0]); if (version !== epoch || target !== editing) return; editing.image_data_base64 = value; mutate(); refreshPhoto(); }
+        try { const value = await image(photo.files[0]); if (version !== epoch || target !== editing) return; editing.image_data_base64 = value; mutate(); refreshPhoto(); message(""); }
         catch (e) { message(e.message); }
         finally { photo.disabled = false; choosePhoto.disabled = false; submit.disabled = false; }
       });
@@ -429,29 +433,26 @@
       branchTitle.id = "store-pickup-title"; branch.setAttribute("aria-labelledby", branchTitle.id); branch.append(branchTitle);
       inputs.branch = field(branch, "Mağaza şubesi", "branch", editing.branch, "text", { max: 200 });
       const storeName = editing.store;
-      const locationValue = el("p", undefined, "pickup-location-value"); locationValue.setAttribute("aria-live", "polite");
       const locationButton = button("", () => {
         const target = editing, version = epoch;
-        choosePoint({ latitude: target.store_latitude, longitude: target.store_longitude }, (p) => {
+        choosePoint({ latitude: target.store_latitude, longitude: target.store_longitude, name: target.branch }, (p) => {
           if (version !== epoch || editing !== target || busy || frozen) return;
-          target.store_latitude = p.latitude; target.store_longitude = p.longitude; mutate(); locationLabel(); message("");
+          target.store_latitude = p.latitude; target.store_longitude = p.longitude; target.branch = p.name;
+          inputs.branch.value = target.branch; mutate(); locationLabel(); message("");
         }, storeName, query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } }));
       });
       const locationLabel = () => {
         const selected = R.point(editing.store_latitude, editing.store_longitude);
         locationButton.textContent = selected ? "Konum seçildi · Değiştir" : "Mağaza konumu seç";
         locationButton.classList.toggle("is-selected", selected);
-        locationButton.setAttribute("aria-describedby", "pickup-location-value");
-        locationValue.id = "pickup-location-value"; locationValue.hidden = !selected;
-        locationValue.textContent = selected ? `${editing.store_latitude.toFixed(5)}, ${editing.store_longitude.toFixed(5)}` : "";
       };
-      locationLabel(); branch.append(locationButton, locationValue); form.append(branch);
+      locationLabel(); branch.append(locationButton); form.append(branch);
       const grid = el("div", undefined, "app-form-grid"); form.append(grid);
       for (const [key, label] of [["size", "Beden / boyut"], ["color", "Renk"]]) inputs[key] = field(grid, label, key, editing[key], "text", { max: 200 });
       inputs.estimated_price = field(form, "Tahmini ürün fiyatı (TL)", "estimated_price", editing.estimated_price, "number", { min: 1, maxNumber: 1000000 }); inputs.estimated_price.step = "1";
       inputs.order_note = field(form, "Sipariş notu", "order_note", editing.order_note, "textarea", { max: 1000, required: false });
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
-        editing[key] = key === "estimated_price" ? Number(input.value) : input.value; mutate();
+        editing[key] = key === "estimated_price" ? Number(input.value) : input.value; mutate(); message("");
       });
       const submit = el("button", draft.items.some((i) => i.client_item_id === editing.client_item_id) ? "Değişiklikleri kaydet" : "Sepete ekle", "button primary-button"); submit.type = "submit";
       form.append(submit); productPanel.append(form);

@@ -71,14 +71,18 @@
   function productName(items, store) {
     return `Ürün ${items.filter(item => item.store === store).length + 1}`;
   }
+  function pickupBranch(store, name = "") {
+    return (String(name || "").trim() || `${store} · Haritadan seçilen konum`).slice(0, 200);
+  }
   function missingStores(draft) {
     return (draft.selectedStores || []).filter(store => !draft.items.some(item => item.store === store));
   }
   function validateItem(item) {
     if (!UUID.test(item.client_item_id)) throw Error("Ürün kimliği geçersiz.");
     if (!validStoreName(item.store)) throw Error("Geçerli bir mağaza adı gir (en fazla 100 karakter).");
-    for (const key of ["branch", "product_name", "size", "color"]) {
-      if (!String(item[key] || "").trim() || item[key].length > 200) throw Error("Ürün, şube, beden ve renk bilgilerini tamamla.");
+    for (const [key, label] of [["branch", "Mağaza şubesi"], ["product_name", "Ürün"], ["size", "Beden / boyut"], ["color", "Renk"]]) {
+      if (typeof item[key] !== "string" || !item[key].trim()) throw Error(`${label} alanını doldur.`);
+      if (item[key].length > 200) throw Error(`${label} en fazla 200 karakter olabilir.`);
     }
     if (!/^[\p{L}\s]+$/u.test(item.color) || item.color.replace(/\s/g, "").length < 3) throw Error("Rengi en az üç harfle yaz.");
     if (!Number.isInteger(item.estimated_price) || item.estimated_price < 1 || item.estimated_price > 1000000) throw Error("Ürün fiyatını 1–1.000.000 TL arasında tam sayı olarak gir.");
@@ -100,8 +104,9 @@
   }
   function validateAddress(a) {
     if (!a || !districts.includes(a.district)) throw Error("Hizmet verilen bir ilçe seç.");
-    for (const key of ["customer_name", "customer_phone", "neighborhood", "address_line", "building_no", "building_name", "directions"]) {
-      if (!String(a[key] || "").trim() || a[key].length > 500) throw Error("Teslimat adresindeki tüm alanları tamamla.");
+    for (const [key, label] of [["customer_name", "Alıcı adı soyadı"], ["customer_phone", "Alıcı cep telefonu"], ["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) {
+      if (typeof a[key] !== "string" || !a[key].trim()) throw Error(`${label} alanını doldur.`);
+      if (a[key].length > 500) throw Error(`${label} en fazla 500 karakter olabilir.`);
     }
     if (!phone(a.customer_phone)) throw Error("Geçerli bir cep telefonu gir.");
     if (a.customer_name.trim().length < 2 || a.customer_name.trim().length > 100) throw Error("Alıcı ad soyadını kontrol et.");
@@ -169,5 +174,5 @@
     }
     return { ...row, amountChanged: Math.abs(row.amount - expectedAmount) > 0.005 };
   }
-  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result };
+  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result };
 });
