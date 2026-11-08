@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const legal = require("../assets/legal-v7.json");
+const legal = require("../assets/legal-v8.json");
 const base = process.env.SITE_TEST_URL || "http://127.0.0.1:8766";
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
 const output = process.env.SITE_SCREENSHOT_DIR || "/private/tmp/ma-web-order-20261105";
@@ -122,6 +122,11 @@ async function main() {
       assert.equal(attempts.length, 2);
       assert.deepEqual(attempts[0], attempts[1], "Retries use identical immutable payload and request ID across reload");
       assert.equal(attempts[1].legal_acceptances.length, 4);
+      for (const doc of attempts[1].legal_acceptances) {
+        assert.equal(doc.document_version, '2026-11-08-model-b-8');
+        assert.ok(doc.content.includes(legal.service_data_notice));
+      }
+      for (const doc of legal.profile) assert.ok(acks.some(ack => ack.document_type === doc.p_document_type && ack.document_version === doc.p_document_version && ack.document_hash === doc.p_document_hash));
       assert.equal(attempts[1].delivery_address.customer_name, "Other Recipient");
       assert.equal(attempts[1].delivery_address.customer_phone, "+905300000000");
       assert.ok(attempts[1].legal_acceptances.some(doc => doc.content.includes("Test Müşteri")));

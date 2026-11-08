@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const contracts = document.getElementById("public-contracts");
-  Promise.all([fetch("/assets/order-catalog.json").then((r) => r.json()), fetch("/assets/legal-v7.json").then((r) => r.json())]).then(([catalog, legal]) => {
+  Promise.all([fetch("/assets/order-catalog.json").then((r) => r.json()), fetch("/assets/legal-v8.json").then((r) => r.json())]).then(([catalog, legal]) => {
     for (const store of catalog.stores) {
       const link = document.createElement("a"); link.className = "store-button"; link.textContent = store; link.href = "/hesabim/";
       document.getElementById("public-stores").append(link);

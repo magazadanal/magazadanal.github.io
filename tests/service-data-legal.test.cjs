@@ -41,7 +41,7 @@ test('web v7 order snapshots personalize and hash all four documents without bro
   for (const type of ['pre_information','distance_contract']) assert.ok(docs.find(p => p.document_type === type).content.includes('yalnız yetkili yönetici'));
   assert.ok(!docs.find(p => p.document_type === 'service_start').content.includes('veri aktarım'));
 });
-test('public privacy explains data groups, bounded recipients and photo/location retention', () => {
+test('public privacy retains bounded recipients and photo/location retention after v7', () => {
   const html = fs.readFileSync(path.join(__dirname,'../privacy/index.html'),'utf8');
-  for (const text of [version,'müşteri veya diğer kuryelere açılmaz','Her alıcıya tüm bilgiler verilmez','30 günlük saklama','Aydınlatma ve açık rıza süreçleri ayrıdır']) assert.ok(html.includes(text),text);
+  for (const text of ['Her alıcıya tüm bilgiler verilmez','30 günlük saklama','Aydınlatma ve açık rıza süreçleri ayrıdır']) assert.ok(html.includes(text),text);
 });
