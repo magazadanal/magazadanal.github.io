@@ -66,7 +66,7 @@
       </form>
       <button id="signup-toggle" class="text-button" type="button">Hesap oluştur</button>
       <form id="signup-form" class="auth-form" hidden>
-        <label for="signup-name">Ad soyad</label><input id="signup-name" autocomplete="name" maxlength="100" required>
+        <label for="signup-name">Ad soyad</label><input id="signup-name" autocomplete="name" minlength="2" maxlength="100" required>
         <label for="signup-email">E-posta</label><input id="signup-email" type="email" autocomplete="email" maxlength="254" required>
         <label for="signup-phone">Cep telefonu</label><input id="signup-phone" type="tel" autocomplete="tel" maxlength="25" required>
         <label for="signup-password">Şifre (8–72 karakter)</label><input id="signup-password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required>
@@ -173,6 +173,6 @@
   <script src="/assets/vendor/leaflet/leaflet.js" defer></script>
   <script src="/hesabim/order-rules.js?v=20261108-2" defer></script>
   <script src="/hesabim/order-flow.js?v=20261108-5" defer></script>
-  <script src="/hesabim/hesabim.js?v=20261108-2" defer></script>
+  <script src="/hesabim/hesabim.js?v=20261109-profile" defer></script>
 </body>
 </html>

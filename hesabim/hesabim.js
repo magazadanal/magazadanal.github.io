@@ -101,6 +101,8 @@
     }
   }
 
+  class ProfileError extends Error {}
+
   async function api(path, options = {}) {
     if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new APIError(400);
     const owner = state.session?.user?.id;
@@ -681,9 +683,36 @@
   }
 
   async function fetchProfile() {
-    const rows = await api(`/rest/v1/profiles?select=id,role,full_name,phone,is_active&id=eq.${encodeURIComponent(state.session.user.id)}`);
+    const owner = state.session.user.id;
+    const path = `/rest/v1/profiles?select=id,role,full_name,phone,is_active&id=eq.${encodeURIComponent(owner)}`;
+    let rows = await api(path);
+    if (!Array.isArray(rows)) throw new APIError(502);
+    if (rows.length === 0) {
+      // Confirmation-required signups have no session yet, so their profile is completed at first login.
+      const user = await api("/auth/v1/user");
+      if (user?.id !== owner || user.is_anonymous === true) throw new APIError(401);
+      if (typeof user.email_confirmed_at !== "string" || !Number.isFinite(Date.parse(user.email_confirmed_at))) {
+        throw new ProfileError("Giriş yapmadan önce e-posta adresini doğrula.");
+      }
+      const name = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name.trim() : "";
+      const phone = typeof user.user_metadata?.phone === "string" ? normalizePhone(user.user_metadata.phone) : null;
+      if (name.length < 2 || name.length > 120 || !phone) {
+        throw new ProfileError("Üyelik bilgilerin tamamlanamadı. Lütfen Bize Ulaşın üzerinden destek iste.");
+      }
+      const ready = await api("/rest/v1/rpc/ensure_customer_profile", {
+        method: "POST", body: { p_full_name: name, p_phone: phone }
+      });
+      if (ready !== true) throw new ProfileError("Müşteri profilin tamamlanamadı. Lütfen Bize Ulaşın üzerinden destek iste.");
+      rows = await api(path);
+      if (!Array.isArray(rows)) throw new APIError(502);
+    }
     const profile = rows?.[0];
-    if (!profile || profile.id !== state.session.user.id || profile.role !== "customer" || !profile.is_active) throw new APIError(403);
+    if (rows.length !== 1 || !profile || profile.id !== owner) {
+      throw new ProfileError("Müşteri profilin doğrulanamadı. Lütfen Bize Ulaşın üzerinden destek iste.");
+    }
+    if (profile.role !== "customer" || profile.is_active !== true) {
+      throw new ProfileError("Bu hesapla müşteri web alanına giriş yapılamıyor.");
+    }
     return profile;
   }
 
@@ -722,8 +751,8 @@
     if (!quiet) elements.loading.hidden = false;
     hideStatus(elements.portalStatus);
     try {
-      const [profile, addresses, orders, supportTickets] = await Promise.all([
-        fetchProfile(),
+      const profile = await fetchProfile();
+      const [addresses, orders, supportTickets] = await Promise.all([
         fetchAddresses(),
         fetchOrders(),
         fetchSupportTickets()
@@ -744,6 +773,10 @@
       renderAll();
       if (completed.length) showStatus(elements.portalStatus, `${completed.map(order => `Sipariş ${orderCode(order)}`).join(", ")} teslim edildi. Detayları Profil > Geçmiş siparişlerim bölümünde.`, "success");
     } catch (error) {
+      if (error instanceof ProfileError) {
+        handleExpiredSession(error.message);
+        return;
+      }
       if (error instanceof APIError && (error.status === 401 || error.status === 403)) {
         handleExpiredSession();
         return;
@@ -755,11 +788,11 @@
     } finally { state.loadInFlight = false; }
   }
 
-  function handleExpiredSession() {
+  function handleExpiredSession(message = "Oturumun sona erdi. Lütfen yeniden giriş yap.") {
     saveSession(null);
     clearPortalData();
     setPortalVisible(false);
-    showStatus(elements.authStatus, "Oturumun sona erdi. Lütfen yeniden giriş yap.", "error");
+    showStatus(elements.authStatus, message, "error");
   }
 
   function normalizePhone(value) {
@@ -1048,7 +1081,7 @@
     const value = (id) => document.getElementById(`signup-${id}`).value.trim();
     const name = value("name"), email = value("email"), phone = normalizePhone(value("phone"));
     const password = document.getElementById("signup-password").value;
-    if (!name || !email.includes("@") || !phone || password.length < 8 || password.length > 72 || password !== document.getElementById("signup-confirm").value) return showStatus(elements.authStatus, "Bilgileri ve aynı yazılan iki şifreyi kontrol et.", "error");
+    if (name.length < 2 || name.length > 100 || !email.includes("@") || !phone || password.length < 8 || password.length > 72 || password !== document.getElementById("signup-confirm").value) return showStatus(elements.authStatus, "Bilgileri ve aynı yazılan iki şifreyi kontrol et.", "error");
     submit.disabled = true;
     try {
       if (!await enforceRuntimeStatus()) return;
