@@ -15,6 +15,8 @@
 .photo-select-button .app-icon { width: 22px; height: 22px; filter: invert(1) !important; }
 .store-pickup { padding: 14px 0; border-block: 1px solid var(--line); }
 .order-app .store-pickup h3 { margin: 0 0 12px; }
+.store-pickup .is-selected { border-color: #2e7068; background: #2e7068; color: #fff; }
+.pickup-location-value { margin: 6px 0 0; padding: 8px 10px; border: 1px solid var(--teal); border-radius: 6px; color: var(--ink); background: var(--panel); font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .link-field { position: relative; }
 .link-field > label { font-size: 14px; font-weight: 600; }
 .app-field.link-field input { padding-right: 95px; }
