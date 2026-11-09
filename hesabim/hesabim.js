@@ -154,6 +154,9 @@
   }
 
   function saveSession(session) {
+    if (!session || state.session?.user?.id !== session.user?.id) try {
+      sessionStorage.removeItem("magazadanal.password-recovery");
+    } catch { /* Recovery credentials from older clients must not survive account changes. */ }
     if (!session && state.session?.user?.id) try {
       sessionStorage.removeItem(`magazadanal.web.view.v1.${state.session.user.id}`);
       sessionStorage.removeItem(`magazadanal.web.support.v1.${state.session.user.id}`);
