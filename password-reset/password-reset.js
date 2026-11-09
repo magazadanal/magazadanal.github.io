@@ -37,45 +37,24 @@
     }
   }
 
-  function storeRecoverySession(accessToken) {
-    const tokenExpiry = accessTokenExpiry(accessToken);
-    const expiresAt = Math.min(tokenExpiry || Infinity, Date.now() + 15 * 60 * 1000);
-
-    try {
-      sessionStorage.setItem(recoverySessionKey, JSON.stringify({ accessToken, expiresAt }));
-    } catch {
-      // The current page can still use the in-memory token.
-    }
-  }
-
-  function readStoredRecoverySession() {
-    try {
-      const storedSession = JSON.parse(sessionStorage.getItem(recoverySessionKey));
-      if (
-        typeof storedSession?.accessToken === "string" &&
-        storedSession.accessToken &&
-        Number.isFinite(storedSession.expiresAt) &&
-        storedSession.expiresAt > Date.now()
-      ) {
-        return storedSession.accessToken;
-      }
-    } catch {
-      // Invalid or unavailable session storage is treated as no recovery session.
-    }
-
-    clearStoredRecoverySession();
-    return null;
-  }
-
-  if (recoveryAccessToken && recoveryType === "recovery") {
-    storeRecoverySession(recoveryAccessToken);
-  } else {
-    const storedAccessToken = readStoredRecoverySession();
-    if (storedAccessToken) {
-      recoveryAccessToken = storedAccessToken;
-      recoveryType = "recovery";
-    }
-  }
+  // Recovery authority belongs only to this link and this page lifetime.
+  clearStoredRecoverySession();
+  const duplicateCredentials = ["token_hash", "type", "access_token"].some(
+    (key) => query.getAll(key).length > 1 || fragment.getAll(key).length > 1
+  );
+  const invalidLink = Boolean(linkError || duplicateCredentials
+    || (query.has("type") && fragment.has("type"))
+    || (tokenHash && recoveryAccessToken)
+    || (tokenHash && !/^[a-f0-9]{56}$/i.test(tokenHash))
+    || (recoveryAccessToken && (recoveryAccessToken.length > 16384
+      || !accessTokenExpiry(recoveryAccessToken)
+      || accessTokenExpiry(recoveryAccessToken) <= Date.now())));
+  let recoveryDeadline = Math.min(
+    accessTokenExpiry(recoveryAccessToken || "") || Infinity,
+    Date.now() + 15 * 60 * 1000
+  );
+  let generation = 0;
+  let pageClosed = false;
 
   window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -103,6 +82,7 @@
       ...options,
       cache: "no-store",
       credentials: "omit",
+      redirect: "error",
       referrerPolicy: "no-referrer",
       headers: {
         apikey: publishableKey,
@@ -121,6 +101,7 @@
   }
 
   async function verifyRecoveryToken() {
+    if (pageClosed || Date.now() >= recoveryDeadline) throw Object.assign(new Error("Recovery expired"), { status: 401 });
     if (recoveryAccessToken) {
       return recoveryAccessToken;
     }
@@ -136,11 +117,14 @@
 
     tokenHash = null;
     recoveryAccessToken = session.access_token;
+    recoveryDeadline = Math.min(recoveryDeadline, accessTokenExpiry(recoveryAccessToken) || recoveryDeadline);
     return recoveryAccessToken;
   }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (pageClosed || invalidLink || recoveryType !== "recovery" || (!tokenHash && !recoveryAccessToken)) return;
+    const submissionGeneration = generation;
 
     const password = passwordInput.value;
     const confirmation = confirmationInput.value;
@@ -162,6 +146,7 @@
 
     try {
       const accessToken = await verifyRecoveryToken();
+      if (pageClosed || generation !== submissionGeneration) return;
       await requestJSON("/auth/v1/user", {
         method: "PUT",
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -192,10 +177,24 @@
     }
   });
 
-  if (linkError && recoveryAccessToken) {
-    showStatus("Güvenli parola yenileme oturumun hazır. Yeni parolanı belirleyebilirsin.");
-    setFormEnabled(true);
-  } else if (linkError) {
+  window.addEventListener("pagehide", () => {
+    pageClosed = true;
+    generation++;
+    tokenHash = null;
+    recoveryAccessToken = null;
+    passwordInput.value = "";
+    confirmationInput.value = "";
+    setFormEnabled(false);
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+      pageClosed = true;
+      showStatus("Parola yenilemeye devam etmek için e-postandaki bağlantıyı yeniden aç.", "error");
+      setFormEnabled(false);
+    }
+  });
+
+  if (invalidLink) {
     tokenHash = null;
     recoveryAccessToken = null;
     clearStoredRecoverySession();
