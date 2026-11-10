@@ -62,7 +62,10 @@ async function main() {
     for (const layout of [
       {name: 'desktop', viewport: {width: 1280, height: 850}, colorScheme: 'light'},
       {name: 'phone', viewport: {width: 390, height: 844}, colorScheme: 'light'},
-      {name: 'phone-dark', viewport: {width: 390, height: 844}, colorScheme: 'dark'}
+      {name: 'phone-dark', viewport: {width: 390, height: 844}, colorScheme: 'dark'},
+      {name: 'signup', viewport: {width: 390, height: 844}, colorScheme: 'light', action: 'signup', label: 'Kayıt'},
+      {name: 'recovery', viewport: {width: 390, height: 844}, colorScheme: 'light', action: 'recovery', label: 'Parola yenileme'},
+      {name: 'replay-accepted', viewport: {width: 1280, height: 850}, colorScheme: 'light', replayAccepted: true}
     ]) {
       const context = await browser.newContext({viewport: layout.viewport, colorScheme: layout.colorScheme});
       const page = await context.newPage(); let verifications = 0, sdkLoads = 0;
@@ -83,12 +86,13 @@ async function main() {
         }
         assert.equal(url.href, 'https://zxqqbzggfbxoasyhueqb.supabase.co/functions/v1/verify-auth-challenge-probe');
         const proof = route.request().postDataJSON();
-        assert.equal(proof.token, 'synthetic-token.0'); assert.equal(proof.action, 'login');
+        assert.equal(proof.token, 'synthetic-token.0'); assert.equal(proof.action, layout.action || 'login');
         assert.ok(/^[0-9a-f-]{36}$/.test(proof.id)); assert.deepEqual(Object.keys(proof).sort(), ['action', 'id', 'token']);
-        return route.fulfill({contentType: 'application/json', body: JSON.stringify({id: proof.id, action: proof.action, verified: ++verifications === 1})});
+        return route.fulfill({contentType: 'application/json', body: JSON.stringify({id: proof.id, action: proof.action, verified: ++verifications === 1 || layout.replayAccepted === true})});
       });
       await page.goto(base + '/auth/probe/');
       await page.getByText('Oturum açık', {exact: true}).waitFor(); assert.equal(sdkLoads, 0);
+      if (layout.label) await page.getByRole('radio', {name: layout.label, exact: true}).check();
       await page.getByRole('button', {name: 'Doğrulamayı başlat', exact: true}).click();
       await page.getByText('Sunucu doğrulaması başarılı.', {exact: true}).waitFor();
       assert.equal(verifications, 1); assert.equal(sdkLoads, 1);
@@ -99,11 +103,40 @@ async function main() {
         await page.screenshot({path: path.join(process.env.SITE_SCREENSHOT_DIR, `probe-${layout.name}.png`), fullPage: true});
       }
       await page.getByRole('button', {name: 'Tekrar kullanımını kontrol et', exact: true}).click();
-      await page.getByText('Tekrar kullanım reddedildi.', {exact: true}).waitFor(); assert.equal(verifications, 2);
+      await page.getByText(layout.replayAccepted ? 'Tekrar kullanım henüz reddedilmedi; test tamamlanmadı.' : 'Tekrar kullanım reddedildi.', {exact: true}).waitFor();
+      assert.equal(verifications, 2);
+      assert.equal(await page.getByRole('button', {name: 'Tekrar kullanımını kontrol et', exact: true}).isEnabled(), false);
+      assert.equal(await page.getByRole('button', {name: 'Doğrulamayı başlat', exact: true}).isEnabled(), true);
       assert.ok(!(await page.evaluate(() => JSON.stringify({...sessionStorage, ...localStorage}))).includes('synthetic-token.0'));
       await context.close();
     }
-    console.log('PASS: disabled rollout, bound synthetic challenge, duplicate callback, provider failure, invalid token, cancellation, timeout, config failure and no token storage. No real provider/auth calls.');
+    for (const expiredInitially of [false, true]) {
+      const context = await browser.newContext(), page = await context.newPage();
+      await page.clock.install({time: new Date()});
+      await page.addInitScript(expired => {
+        sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({accessToken: 'synthetic-session-token',
+          expiresAt: Date.now() + (expired ? -1000 : 15000), user: {id: '10000000-0000-4000-8000-000000000002'}}));
+      }, expiredInitially);
+      let externalCalls = 0;
+      await page.route('**/*', route => {
+        if (new URL(route.request().url()).origin === base) return route.continue();
+        externalCalls++; return route.abort();
+      });
+      await page.goto(base + '/auth/probe/');
+      if (!expiredInitially) {
+        await page.getByText('Oturum açık', {exact: true}).waitFor();
+        await page.clock.fastForward(5100);
+      }
+      await page.getByText('Hesabına dönüp oturumunu yenile.', {exact: true}).waitFor();
+      assert.equal(await page.getByRole('button', {name: 'Doğrulamayı başlat', exact: true}).isEnabled(), false);
+      assert.equal(await page.getByRole('button', {name: 'Tekrar kullanımını kontrol et', exact: true}).isEnabled(), false);
+      assert.equal(externalCalls, 0);
+      assert.equal(await page.getByRole('link', {name: 'Hesabıma dön', exact: true}).getAttribute('href'), '/hesabim/');
+      const saved = JSON.parse(await page.evaluate(() => sessionStorage.getItem('magazadanal.web.session.v1')));
+      assert.equal(saved.accessToken, 'synthetic-session-token');
+      await context.close();
+    }
+    console.log('PASS: disabled rollout, bound synthetic challenge, duplicate callback, provider failure, invalid token, cancellation, timeout, config failure, session expiry and no token storage. No real provider/auth calls.');
   } finally { await browser.close(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
