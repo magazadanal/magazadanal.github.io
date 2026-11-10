@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'self'">
+  <title>Güvenlik testi | Mağazadan AL</title>
+  <link rel="stylesheet" href="/auth/probe/probe.css">
+  <script src="/auth/protection.js" defer></script>
+  <script src="/auth/probe/probe.js" defer></script>
+</head>
+<body>
+  <main>
+    <img class="brand" src="/assets/magazadanal-logo-web.svg" alt="Mağazadan AL" width="140" height="100">
+    <h1>Güvenlik testi</h1>
+    <p id="session-status" role="status"></p>
+    <fieldset>
+      <legend>İşlem</legend>
+      <label><input type="radio" name="action" value="login" checked> Giriş</label>
+      <label><input type="radio" name="action" value="signup"> Kayıt</label>
+      <label><input type="radio" name="action" value="recovery"> Parola yenileme</label>
+    </fieldset>
+    <button id="start" type="button">Doğrulamayı başlat</button>
+    <button id="replay" type="button" disabled>Tekrar kullanımını kontrol et</button>
+    <p id="result" role="status" aria-live="polite"></p>
+    <a href="/hesabim/">Hesabıma dön</a>
+  </main>
+</body>
+</html>

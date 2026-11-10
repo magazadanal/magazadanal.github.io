@@ -29,3 +29,9 @@
 
 /.well-known/apple-app-site-association
   Content-Type: application/json
+
+/assets/auth-protection.json
+  Cache-Control: no-store, max-age=0
+
+/assets/auth-protection-probe.json
+  Cache-Control: no-store, max-age=0
