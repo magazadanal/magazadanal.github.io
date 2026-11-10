@@ -14,13 +14,17 @@ http.createServer(async (req, res) => {
     if (!file.startsWith(root + path.sep)) throw Error();
     const data = await fs.readFile(file);
     const account = pathname.startsWith("/hesabim/");
+    const challenge = pathname.startsWith("/auth/challenge/");
+    const probe = pathname.startsWith("/auth/probe/");
     const headers = {
       "Content-Type": types[path.extname(file)] || "application/octet-stream",
-      "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+      "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": challenge ? "SAMEORIGIN" : "DENY",
       "Permissions-Policy": `camera=(), microphone=(), geolocation=${account ? "(self)" : "()"}, payment=(), usb=()`,
       "Referrer-Policy": "no-referrer"
     };
-    if (account) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; manifest-src 'self'";
+    if (account) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'; manifest-src 'self'";
+    if (challenge) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://challenges.cloudflare.com; img-src 'self' data:; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'; frame-src https://challenges.cloudflare.com";
+    if (probe) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'";
     res.writeHead(200, headers);
     res.end(req.method === "HEAD" ? undefined : data);
   } catch { res.writeHead(404, { "Content-Type": "text/plain" }); res.end("Not found"); }

@@ -1,0 +1,8 @@
+:root { color-scheme: light dark; font-family: Arial, sans-serif; letter-spacing: 0; }
+body { margin: 0; background: light-dark(#fff, #191d1c); color: light-dark(#172321, #edf5f2); }
+main { max-width: 400px; margin: 0 auto; padding: 24px 12px; text-align: center; }
+img { object-fit: contain; }
+h1 { font-size: 19px; margin: 12px 0; }
+p { font-size: 14px; min-height: 20px; }
+#challenge-widget { display: flex; justify-content: center; min-height: 70px; }
+@media (prefers-color-scheme: dark) { img { filter: invert(1) hue-rotate(170deg); mix-blend-mode: screen; } }
