@@ -43,20 +43,20 @@ async function main() {
           return route.continue();
         }
         if(url.hostname==='challenges.cloudflare.com') return route.fulfill({contentType:'application/javascript',
-          body:'window.turnstile={render(selector,options){setTimeout(()=>options.callback("synthetic-account-proof"),30)}};'});
+          body:`window.turnstile={render(selector,options){setTimeout(()=>options.callback("synthetic-account-proof"),${scenario==='recovery-login'?600:30})}};`});
         assert.equal(url.origin,'https://zxqqbzggfbxoasyhueqb.supabase.co','No unmocked external requests');
         calls.push(p); let data,status=200;
         if(p.endsWith('get_public_runtime_status')) data=[{customer_web_account_enabled:true,customer_ordering_enabled:true}];
         else if(p==='/auth/v1/signup') {
           assert.equal(ensured,0); const body=req.postDataJSON();
           assert.equal(body.data.full_name,'Test Müşteri'); assert.equal(body.data.phone,profile.phone);
-          assert.equal(body.gotrue_meta_security.captcha_token,'synthetic-account-proof');
+          if(!baseline) assert.equal(body.gotrue_meta_security.captcha_token,'synthetic-account-proof');
           data={user:{...user,email_confirmed_at:null}};
         } else if(p==='/auth/v1/recover') {
           assert.deepEqual(req.postDataJSON(),{email:user.email,gotrue_meta_security:{captcha_token:'synthetic-account-proof'}});
           data={};
         } else if(p==='/auth/v1/token'||p==='/functions/v1/phone-password-login') {
-          if(url.searchParams.get('grant_type')!=='refresh_token') assert.equal(req.postDataJSON().gotrue_meta_security.captcha_token,'synthetic-account-proof');
+          if(!baseline&&url.searchParams.get('grant_type')!=='refresh_token') assert.equal(req.postDataJSON().gotrue_meta_security.captcha_token,'synthetic-account-proof');
           if(p.endsWith('phone-password-login')) assert.equal(req.postDataJSON().phone,profile.phone);
           data=session;
         }
@@ -102,6 +102,12 @@ async function main() {
         await page.locator('#login-email').fill(scenario==='phone-login'?profile.phone:user.email);
         if(scenario==='recovery-login') {
           await page.locator('#forgot-password-button').click();
+          const close = page.getByRole('dialog',{name:'Güvenlik doğrulaması'}).getByRole('button',{name:'Kapat',exact:true});
+          const bounds = await close.locator('img').evaluate(img => ({width:img.getBoundingClientRect().width,
+            height:img.getBoundingClientRect().height,parentWidth:img.parentElement.getBoundingClientRect().width,
+            parentHeight:img.parentElement.getBoundingClientRect().height}));
+          assert.ok(bounds.width>0&&bounds.height>0&&bounds.width<=bounds.parentWidth&&bounds.height<=bounds.parentHeight,'Close icon must fit inside its button');
+          await page.screenshot({path:path.join(output,'account-captcha-dialog.png'),fullPage:true});
           await page.getByText('Parola yenileme bağlantısı mail adresine gönderildi.',{exact:true}).waitFor();
           assert.equal(await page.evaluate(()=>sessionStorage.getItem('magazadanal.web.session.v1')),null);
         }
