@@ -818,7 +818,7 @@
       ? "/auth/v1/token?grant_type=password"
       : "/functions/v1/phone-password-login", {
       method: "POST",
-      body: isEmail ? { email: identifier, password } : { phone: normalizePhone(identifier), password },
+      body: await protectedAuthBody("login", isEmail ? { email: identifier, password } : { phone: normalizePhone(identifier), password }),
       token: null
     });
     const session = sessionFromResponse(data);
@@ -830,9 +830,14 @@
   async function requestPasswordReset(email) {
     await api(`/auth/v1/recover?redirect_to=${encodeURIComponent("https://magazadanal.com/password-reset/")}`, {
       method: "POST",
-      body: { email },
+      body: await protectedAuthBody("recovery", { email }),
       token: null
     });
+  }
+
+  async function protectedAuthBody(action, body) {
+    if (!window.MAAuthProtection) throw new APIError(503);
+    return window.MAAuthProtection.protect(action, body);
   }
 
   async function logout() {
@@ -1088,7 +1093,7 @@
     submit.disabled = true;
     try {
       if (!await enforceRuntimeStatus()) return;
-      const data = await api("/auth/v1/signup?redirect_to=https%3A%2F%2Fmagazadanal.com%2Fauth%2Fverify-email%2F", { method: "POST", token: null, body: { email, password, data: { full_name: name, phone } } });
+      const data = await api("/auth/v1/signup?redirect_to=https%3A%2F%2Fmagazadanal.com%2Fauth%2Fverify-email%2F", { method: "POST", token: null, body: await protectedAuthBody("signup", { email, password, data: { full_name: name, phone } }) });
       const session = sessionFromResponse(data);
       document.getElementById("signup-password").value = ""; document.getElementById("signup-confirm").value = "";
       if (session) {

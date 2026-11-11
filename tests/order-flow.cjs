@@ -25,13 +25,18 @@ async function main() {
         const req = route.request(); const url = new URL(req.url());
         if (url.origin === base && url.pathname === "/assets/checkout-reference.json") return route.fulfill({ contentType: "application/json", body: '{"enabled":false}' });
         if (url.origin === base) return route.continue();
+        if (url.hostname === 'challenges.cloudflare.com') return route.fulfill({contentType:'application/javascript',
+          body:'window.turnstile={render(selector,options){setTimeout(()=>options.callback("synthetic-order-login-proof"),30)}};'});
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co", "No unmocked external network");
         const p = url.pathname; const body = req.postDataJSON(); calls.push({ path: p, body });
         let data;
         if (p.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
         else if (p === "/functions/v1/web-store-search") data = { results: [] };
-        else if (p === "/auth/v1/token") data = { access_token: "mock-access-token", refresh_token: "mock-refresh-token", expires_in: 3600, user: { id: owner, email: "customer@example.invalid" } };
+        else if (p === "/auth/v1/token") {
+          if (url.searchParams.get('grant_type') === 'password') assert.equal(body.gotrue_meta_security.captcha_token,'synthetic-order-login-proof');
+          data = { access_token: "mock-access-token", refresh_token: "mock-refresh-token", expires_in: 3600, user: { id: owner, email: "customer@example.invalid" } };
+        }
         else if (p === "/rest/v1/profiles") data = [{ id: owner, role: "customer", full_name: "Test Müşteri", phone: "+905301234567", is_active: true }];
         else if (p === "/rest/v1/customer_addresses") data = [{ id: "30000000-0000-4000-8000-000000000001", title: "Ev", city: "İstanbul", district: "Şişli", neighborhood: "Test Mahallesi", address_line: "Test Sokak", building_no: "1", building_name: "Bina kat 1 daire 2", directions: "Kapı", latitude: 41.07, longitude: 29, is_invoice: true }];
         else if (p === "/rest/v1/orders") data = created ? [{ id: orderID, order_no: "000001", status: delivered ? "delivered" : "payment_waiting", selected_store_count: 1, customer_total: 460, created_at: new Date().toISOString(), order_items: [] }] : [];

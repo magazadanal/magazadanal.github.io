@@ -18,7 +18,8 @@ test("QNB does not introduce card data collection, third-party scripts or fake p
   assert.ok(!/name=["'](?:card|cvv)|MerchantPassword/.test(flow));
   const html = read("hesabim/index.html");
   assert.ok(!/<script[^>]+src=["']https?:/i.test(html));
-  assert.ok(html.includes("frame-src 'none'"));
+  assert.ok(html.includes("frame-src 'self'"));
+  assert.ok(!html.includes('frame-src https:') && !html.includes('challenges.cloudflare.com'));
   assert.ok(!html.includes("unsafe-eval"));
 });
 test("pinned map dependency retains license and audited bytes", () => {
@@ -35,7 +36,8 @@ test("account and public conditions policies allow only their required resources
     assert.ok(html.includes("script-src 'self';"));
     assert.ok(!/unsafe-inline|unsafe-eval|https:\/\/\*/.test(html));
   }
-  assert.ok(account.includes("frame-src 'none';"));
+  assert.ok(account.includes("frame-src 'self';"));
+  assert.ok(read("_headers").split("/hesabim/*")[0].includes("frame-src 'none';"));
   assert.ok(preview.includes('geolocation=${account ? "(self)" : "()"}'));
   assert.ok(read("docs/web-bank-readiness.md").includes("GitHub Pages tarafından uygulanmaz"));
 });
