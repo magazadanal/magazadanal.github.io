@@ -36,6 +36,10 @@ test('all interactive web auth routes are protected; refresh and recovery comple
   assert.ok(!/localStorage|sessionStorage|console\.|password|access_token/.test(page));
   assert.ok(page.includes('postMessage(message, location.origin)'));
 });
+test('the challenge close icon uses the bounded shared button icon class', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../auth/protection.js'), 'utf8');
+  assert.ok(source.includes('closeIcon.className = "app-icon"'));
+});
 test('temporary probe cannot change normal authentication or send a session to Cloudflare', () => {
   const config = require('../assets/auth-protection-probe.json');
   assert.equal(config.project, project); assert.equal(config.enabled, true);

@@ -35,7 +35,7 @@
         const id = crypto.randomUUID(), dialog = document.createElement("dialog"), frame = document.createElement("iframe");
         dialog.className = "auth-challenge-dialog"; dialog.setAttribute("aria-label", "Güvenlik doğrulaması");
         const close = document.createElement("button"); close.type = "button"; close.className = "app-close";
-        const closeIcon = document.createElement("img"); closeIcon.src = "/assets/icons/close.png"; closeIcon.alt = ""; close.append(closeIcon);
+        const closeIcon = document.createElement("img"); closeIcon.className = "app-icon"; closeIcon.src = "/assets/icons/close.png"; closeIcon.alt = ""; close.append(closeIcon);
         close.title = "Kapat"; close.setAttribute("aria-label", "Kapat");
         frame.title = "Güvenlik doğrulaması"; frame.referrerPolicy = "no-referrer";
         frame.src = "/auth/challenge/?" + new URLSearchParams({ id, action, client: "web", ...(probe ? {probe: "1"} : {}) });
