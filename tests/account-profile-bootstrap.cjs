@@ -14,7 +14,7 @@ const profile = {id:owner,role:'customer',full_name:'Test Müşteri',phone:'+905
 const user = {id:owner,email:'customer@example.invalid',email_confirmed_at:'2026-11-09T00:00:00Z',
   user_metadata:{full_name:' Test Müşteri ',phone:'0530 123 45 67',role:'admin'}};
 const session = {access_token:'synthetic-access',refresh_token:'synthetic-refresh',expires_in:3600,user};
-const scenarios = ['missing-login','missing-restored','signup-confirm-login','existing','inactive','admin',
+const scenarios = ['missing-login','missing-restored','signup-confirm-login','existing','phone-login','recovery-login','inactive','admin',
   'courier','invalid-metadata','unconfirmed','foreign-user','deleted-user','rpc-denied','rpc-not-persisted','foreign-profile','profile-forbidden'];
 
 async function main() {
@@ -31,7 +31,7 @@ async function main() {
       const context=await browser.newContext({viewport:{width:scenario==='missing-restored'?390:1280,height:900}});
       const page=await context.newPage(),calls=[],errors=[];
       page.setDefaultTimeout(8000); page.on('pageerror',error=>errors.push(error.message));
-      let existing=['existing','inactive','admin','courier','foreign-profile'].includes(scenario);
+      let existing=['existing','phone-login','recovery-login','inactive','admin','courier','foreign-profile'].includes(scenario);
       let ensured=0;
       if(scenario==='missing-restored') await page.addInitScript(({owner})=>sessionStorage.setItem('magazadanal.web.session.v1',
         JSON.stringify({accessToken:'synthetic-access',refreshToken:'synthetic-refresh',expiresAt:Date.now()+3600000,
@@ -42,14 +42,24 @@ async function main() {
           if(baseline && p==='/hesabim/hesabim.js') return route.fulfill({contentType:'application/javascript',body:baseline});
           return route.continue();
         }
+        if(url.hostname==='challenges.cloudflare.com') return route.fulfill({contentType:'application/javascript',
+          body:'window.turnstile={render(selector,options){setTimeout(()=>options.callback("synthetic-account-proof"),30)}};'});
         assert.equal(url.origin,'https://zxqqbzggfbxoasyhueqb.supabase.co','No unmocked external requests');
         calls.push(p); let data,status=200;
         if(p.endsWith('get_public_runtime_status')) data=[{customer_web_account_enabled:true,customer_ordering_enabled:true}];
         else if(p==='/auth/v1/signup') {
           assert.equal(ensured,0); const body=req.postDataJSON();
           assert.equal(body.data.full_name,'Test Müşteri'); assert.equal(body.data.phone,profile.phone);
+          assert.equal(body.gotrue_meta_security.captcha_token,'synthetic-account-proof');
           data={user:{...user,email_confirmed_at:null}};
-        } else if(p==='/auth/v1/token') data=session;
+        } else if(p==='/auth/v1/recover') {
+          assert.deepEqual(req.postDataJSON(),{email:user.email,gotrue_meta_security:{captcha_token:'synthetic-account-proof'}});
+          data={};
+        } else if(p==='/auth/v1/token'||p==='/functions/v1/phone-password-login') {
+          if(url.searchParams.get('grant_type')!=='refresh_token') assert.equal(req.postDataJSON().gotrue_meta_security.captcha_token,'synthetic-account-proof');
+          if(p.endsWith('phone-password-login')) assert.equal(req.postDataJSON().phone,profile.phone);
+          data=session;
+        }
         else {
           assert.equal(req.headers().authorization,'Bearer synthetic-access');
           if(p==='/auth/v1/user') {
@@ -89,13 +99,18 @@ async function main() {
           assert.equal(ensured,0,'No profile write without a session');
           await page.locator('#signup-toggle').click();
         }
-        await page.locator('#login-email').fill(user.email);
+        await page.locator('#login-email').fill(scenario==='phone-login'?profile.phone:user.email);
+        if(scenario==='recovery-login') {
+          await page.locator('#forgot-password-button').click();
+          await page.getByText('Parola yenileme bağlantısı mail adresine gönderildi.',{exact:true}).waitFor();
+          assert.equal(await page.evaluate(()=>sessionStorage.getItem('magazadanal.web.session.v1')),null);
+        }
         await page.locator('#login-password').fill('synthetic-password');
         await page.locator('#login-button').click();
       }
       await page.waitForFunction(()=>document.querySelector('#profile-name').textContent==='Test'
         || !document.querySelector('#auth-status').hidden);
-      const successful=['missing-login','missing-restored','signup-confirm-login','existing'].includes(scenario);
+      const successful=['missing-login','missing-restored','signup-confirm-login','existing','phone-login','recovery-login'].includes(scenario);
       if(successful) {
         const error=await page.locator('#auth-status').textContent();
         if(await page.locator('#auth-view').isVisible()) await page.screenshot({path:path.join(output,`${scenario}-failure.png`),fullPage:true});
@@ -103,8 +118,8 @@ async function main() {
         await page.locator('[data-view="profile"]').click();
         assert.equal(await page.locator('#profile-name').textContent(),'Test');
         assert.equal(await page.locator('#profile-surname').textContent(),'Müşteri');
-        assert.equal(ensured,scenario==='existing'?0:1);
-        if(scenario!=='existing') {
+        assert.equal(ensured,['existing','phone-login','recovery-login'].includes(scenario)?0:1);
+        if(!['existing','phone-login','recovery-login'].includes(scenario)) {
           assert.ok(calls.indexOf('/rest/v1/rpc/ensure_customer_profile')<calls.indexOf('/rest/v1/rpc/list_support_tickets_v3'));
           await page.screenshot({path:path.join(output,`${scenario}-success.png`),fullPage:true});
           await page.reload(); await page.waitForFunction(()=>document.querySelector('#profile-name').textContent==='Test');

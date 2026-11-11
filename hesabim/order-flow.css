@@ -195,6 +195,10 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .legal-approval { min-height: 48px; padding-block: 8px; }
 .profile-menu { margin-block: 14px; }
 .profile-menu button, .profile-menu a { padding-block: 10px; min-height: 44px; }
+.auth-challenge-dialog { border: 1px solid var(--line, #dce4e1); border-radius: 8px; padding: 44px 8px 8px; width: min(400px, calc(100vw - 32px)); background: var(--surface, #fff); }
+.auth-challenge-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.auth-challenge-dialog > .app-close { position: absolute; top: 8px; right: 8px; }
+.auth-challenge-dialog iframe { display: block; border: 0; width: 100%; height: 300px; }
 .profile-details div { padding-block: 8px; }
 .saved-address { padding-block: 10px; }
 .app-dialog-header, .app-dialog-body { padding: 12px 16px; }

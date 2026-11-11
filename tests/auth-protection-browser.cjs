@@ -110,6 +110,65 @@ async function main() {
       assert.ok(!(await page.evaluate(() => JSON.stringify({...sessionStorage, ...localStorage}))).includes('synthetic-token.0'));
       await context.close();
     }
+    for (const action of ['signup', 'recovery']) {
+      for (const failure of ['cancel', 'server']) {
+        const context = await browser.newContext(), page = await context.newPage();
+        await page.addInitScript(() => {
+          if (window !== window.top) return;
+          sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({
+            accessToken: 'synthetic-session-token', expiresAt: Date.now() + 3600000,
+            user: {id: '10000000-0000-4000-8000-000000000002'}
+          }));
+        });
+        let sdkLoads = 0;
+        const proofIDs = [];
+        await page.route('**/*', route => {
+          const url = new URL(route.request().url());
+          if (url.origin === base) {
+            if (url.pathname === '/assets/auth-protection-probe.json') return route.fulfill({contentType: 'application/json', body: JSON.stringify({
+              version: 1, project: 'zxqqbzggfbxoasyhueqb', enabled: true, site_key: '0x4AAAAAAAAAAAAAAAAAAA',
+              expires_at: new Date(Date.now() + 3600000).toISOString()
+            })});
+            return route.continue();
+          }
+          if (url.hostname === 'challenges.cloudflare.com') {
+            const attempt = ++sdkLoads;
+            const behavior = failure === 'cancel' && attempt === 1 ? '' : `setTimeout(()=>options.callback("synthetic-token.${attempt}"),30)`;
+            return route.fulfill({contentType: 'application/javascript', body: `window.turnstile={render(selector,options){${behavior}}};`});
+          }
+          assert.equal(url.href, 'https://zxqqbzggfbxoasyhueqb.supabase.co/functions/v1/verify-auth-challenge-probe');
+          assert.equal(route.request().method(), 'POST');
+          const proof = route.request().postDataJSON();
+          assert.equal(proof.action, action);
+          assert.deepEqual(Object.keys(proof).sort(), ['action', 'id', 'token']);
+          assert.ok(!proofIDs.includes(proof.id), 'A new attempt must have a fresh proof identifier');
+          proofIDs.push(proof.id);
+          return route.fulfill({status: failure === 'server' && proofIDs.length === 1 ? 503 : 200,
+            contentType: 'application/json', body: JSON.stringify({id: proof.id, action, verified: true})});
+        });
+        await page.goto(base + '/auth/probe/');
+        await page.getByText('Oturum açık', {exact: true}).waitFor();
+        const storedBefore = await page.evaluate(() => sessionStorage.getItem('magazadanal.web.session.v1'));
+        await page.getByRole('radio', {name: action === 'signup' ? 'Kayıt' : 'Parola yenileme', exact: true}).check();
+        await page.getByRole('button', {name: 'Doğrulamayı başlat', exact: true}).click();
+        if (failure === 'cancel') {
+          await page.waitForFunction(() => Boolean(document.querySelector('iframe')?.contentWindow?.turnstile));
+          await page.getByRole('button', {name: 'Kapat', exact: true}).click();
+        }
+        await page.getByText(failure === 'cancel' ? 'Güvenlik doğrulaması tamamlanmadı. Yeniden dene.' : 'Test doğrulanamadı. Yeniden dene.', {exact: true}).waitFor();
+        assert.equal(await page.getByRole('button', {name: 'Doğrulamayı başlat', exact: true}).isEnabled(), true);
+        assert.equal(await page.getByRole('button', {name: 'Tekrar kullanımını kontrol et', exact: true}).isEnabled(), false);
+        assert.equal(await page.locator('.auth-challenge-dialog').count(), 0);
+        assert.equal(proofIDs.length, failure === 'cancel' ? 0 : 1);
+        await page.getByRole('button', {name: 'Doğrulamayı başlat', exact: true}).click();
+        await page.getByText('Sunucu doğrulaması başarılı.', {exact: true}).waitFor();
+        assert.equal(sdkLoads, 2);
+        assert.equal(proofIDs.length, failure === 'cancel' ? 1 : 2);
+        assert.equal(await page.evaluate(() => sessionStorage.getItem('magazadanal.web.session.v1')), storedBefore);
+        assert.ok(!(await page.evaluate(() => JSON.stringify({...sessionStorage, ...localStorage}))).includes('synthetic-token.'));
+        await context.close();
+      }
+    }
     for (const expiredInitially of [false, true]) {
       const context = await browser.newContext(), page = await context.newPage();
       await page.clock.install({time: new Date()});
@@ -136,7 +195,7 @@ async function main() {
       assert.equal(saved.accessToken, 'synthetic-session-token');
       await context.close();
     }
-    console.log('PASS: disabled rollout, bound synthetic challenge, duplicate callback, provider failure, invalid token, cancellation, timeout, config failure, session expiry and no token storage. No real provider/auth calls.');
+    console.log('PASS: disabled rollout, bound synthetic challenge, duplicate callback, provider failure, invalid token, signup/recovery cancellation and server-failure retry, timeout, config failure, session expiry and no token storage. No real provider/auth calls.');
   } finally { await browser.close(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

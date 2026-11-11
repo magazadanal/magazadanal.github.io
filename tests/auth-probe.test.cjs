@@ -4,8 +4,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 const P = require('../auth/protection.js');
-test('test configuration remains separate from disabled production authentication', () => {
-  assert.equal(P.configuration(JSON.parse(read('assets/auth-protection.json'))).enabled, false);
+test('temporary test configuration remains separate from approved production authentication', () => {
+  const production = P.configuration(JSON.parse(read('assets/auth-protection.json')));
+  assert.equal(production.enabled, true);
+  assert.equal(production.site_key, '0x4AAAAAAF7hyN8yBXtEY5FN');
+  assert.equal(production.expires_at, undefined);
   const probe = P.configuration(JSON.parse(read('assets/auth-protection-probe.json')));
   assert.equal(probe.enabled, true); assert.equal(probe.project, 'zxqqbzggfbxoasyhueqb');
   assert.ok(Number.isFinite(Date.parse(probe.expires_at)));
