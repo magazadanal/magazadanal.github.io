@@ -202,5 +202,28 @@
       || !Number.isFinite(Date.parse(row.created_at)) || Date.parse(row.created_at) > Date.parse(current.created_at)) throw Error("Ek ödeme kaydı talep ile eşleşmiyor.");
     return {paymentID: row.id, requestID: request.id, code: row.transfer_code, amount: cents / 100};
   }
-  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails };
+  function orderCursor(row) {
+    if (!UUID.test(row?.id || "") || typeof row.created_at !== "string"
+      || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(row.created_at)
+      || !Number.isFinite(Date.parse(row.created_at))) throw Error("Sipariş sayfası doğrulanamadı.");
+    return { id: row.id, created_at: row.created_at };
+  }
+  function olderOrdersFilter(cursor) {
+    const value = orderCursor(cursor);
+    return `&or=${encodeURIComponent(`(created_at.lt.${value.created_at},and(created_at.eq.${value.created_at},id.lt.${value.id}))`)}`;
+  }
+  function orderHistoryPage(rows, previousCursor) {
+    if (!Array.isArray(rows) || rows.length > 100 || new Set(rows.map(row => row?.id)).size !== rows.length
+      || rows.some(row => !["delivered", "cancelled"].includes(row?.status))) throw Error("Sipariş sayfası doğrulanamadı.");
+    rows.forEach(orderCursor);
+    const next = rows.length ? orderCursor(rows.at(-1)) : previousCursor;
+    if (rows.length && previousCursor && next.id === previousCursor.id && next.created_at === previousCursor.created_at) throw Error("Sipariş sayfası ilerlemedi.");
+    return { rows, cursor: next, hasMore: rows.length === 100 };
+  }
+  function newestOrderFirst(a, b) {
+    const micros = row => Number((String(row.created_at).match(/\.(\d{1,6})/)?.[1] || "").padEnd(6, "0")) % 1000;
+    return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
+      || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  }
+  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });

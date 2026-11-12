@@ -195,6 +195,37 @@ altyapısında değişiklik yoktur.
 SITE_TEST_URL=http://127.0.0.1:8895 node tests/not-found-browser.cjs
 ```
 
+## 12 Kasım: Geçmiş ve Aktif Takip Eşitlemesi
+
+- Geçmiş artık son 100 siparişle sınırlı değildir. Daha eski kayıtlar açık
+  kullanıcı komutuyla 100'lük sayfalar halinde okunur. Ham sunucu tarihi
+  (mikrosaniyeler dahil) ve UUID birlikte imleçtir; yeni sipariş gelmesi
+  sayfa kaydırmasına, aynı kaydın çoğalmasına veya tarihin yuvarlanmasına
+  neden olmaz. Hata halinde liste ve imleç korunur; çıkışta önbellek silinir.
+- Aktif siparişler ayrı, aynı müşteriye filtreli sayfalı okumayla alınır.
+  Son 100 kayıttan eski bir aktif sipariş gizlenmez. Takip edilen sipariş
+  sona ererse gerçek son durumu kendi kimliğiyle okunur ve geçmişe eklenir.
+- Açık onayla, yalnız görünür Takip ekranında durum ve açık kartın konumu
+  iki saniyede bir kontrol edilir. Çakışan istekler atlanır, gizli sayfada
+  durur. Tam profil/adres/destek yenilemesi iki saniyeye çekilmedi; mevcut
+  15 saniyelik aralık korunur. Değişmeyen kart/harita yeniden kurulmaz.
+- Siparişin doğrudan açılması son 100 kayıt içinde bulunmasına bağlı
+  değildir. Seçilen kimlik yine müşterinin mevcut oturumuyla ve kendi
+  müşteri filtresiyle okunur. Yeni izin, API veya güvenlik istisnası yoktur.
+
+93 Node testi ve sahte API kullanan dört yeni tarayıcı senaryosu 249 geçmiş
+kaydı, eski aktif siparişi, hata/tekrar denemeyi, çıkışı, görünür/gizli
+takibi ve teslim sonrası geçmişe geçişi sınar. Gerçek müşteri kaydı veya
+ödeme oluşturulmaz. Mevcut sipariş/adres/üyelik/destek/oturum/fotoğraf ve
+ek ödeme regresyonları ayrıca çalıştırılır.
+
+```sh
+SITE_TEST_URL=http://127.0.0.1:8896 node tests/order-history-browser.cjs
+```
+
+QNB kart bağlantısı, 3DS ve banka geri dönüşleri bu pakette açılmaz.
+Fiyatlar, ödeme onayı, sözleşmeler, RLS ve yönetici cihaz kilidi değişmez.
+
 ## Kaynaklar ve Varlıklar
 
 - [QNB site ön koşulları](https://www.qnb.com.tr/dijitalkopru/akademi/sanal-pos-nedir-10905)
