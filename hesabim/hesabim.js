@@ -562,8 +562,8 @@
     }); card.append(documentButton);
     if (ACTIVE_ORDER_STATUSES.has(order.status)) {
       const events = state.activities.filter((a) => a.order_id === order.id);
-      for (const request of events.filter((a) => ["alternative_requested", "extra_payment_requested"].includes(a.action) && a.current_assignment !== false && MAOrderRules.UUID.test(a.id))) {
-        if (events.some((a) => a.request_id === request.id && ["alternative_approved", "alternative_rejected", "extra_payment_confirmed", "extra_payment_reported"].includes(a.action))) continue;
+      const requests = ["alternative_requested", "extra_payment_requested"].map(action => MAOrderRules.currentOrderRequest(events, order.id, action)).filter(Boolean);
+      for (const request of requests) {
         const box = element("div", "app-disclosure"); box.append(element("p", "", activityText(request)));
         if (request.action === "extra_payment_requested") {
           const owner = state.session?.user?.id, generation = state.generation;
@@ -601,17 +601,22 @@
           });
           card.append(box); continue;
         }
+        const owner = state.session?.user?.id, generation = state.generation;
+        const current = () => box.isConnected && owner === state.session?.user?.id && generation === state.generation;
+        let responding = false;
         const choices = [["Onayla", "alternative_approved"], ["Reddet", "alternative_rejected"]];
         for (const [label, response] of choices) {
           const command = element("button", "button compact-button", label); command.type = "button";
           command.addEventListener("click", async () => {
+            if (!current() || responding) return;
+            responding = true;
             box.querySelectorAll("button").forEach((n) => { n.disabled = true; });
             try {
               const result = await api("/rest/v1/rpc/customer_respond_to_order_request", { method: "POST", body: { target_order_id: order.id, target_request_id: request.id, response_name: response } });
               if (!["success", "already_responded", true].includes(result)) throw Error();
-              await loadPortal({ quiet: true });
-            } catch { showStatus(elements.portalStatus, "Yanıt doğrulanamadı. Sipariş durumu otomatik olarak yeniden kontrol edilecek.", "error"); }
-            finally { box.querySelectorAll("button").forEach((n) => { n.disabled = false; }); }
+              if (current()) await loadPortal({ quiet: true });
+            } catch { if (current()) showStatus(elements.portalStatus, "Yanıt doğrulanamadı. Sipariş durumu otomatik olarak yeniden kontrol edilecek.", "error"); }
+            finally { responding = false; if (current()) box.querySelectorAll("button").forEach((n) => { n.disabled = false; }); }
           }); box.append(command);
         } card.append(box);
       }
