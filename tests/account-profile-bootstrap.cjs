@@ -92,7 +92,7 @@ async function main() {
         await page.locator('#login-button').waitFor({state:'visible'});
         if(scenario==='signup-confirm-login') {
           await page.locator('#signup-toggle').click();
-          for(const [id,value] of Object.entries({name:'Test Müşteri',email:user.email,phone:'0530 123 45 67',
+          for(const [id,value] of Object.entries({name:'Test',surname:'Müşteri',email:user.email,phone:'0530 123 45 67',
             password:'synthetic-password',confirm:'synthetic-password'})) await page.locator('#signup-'+id).fill(value);
           await page.locator('#signup-form button[type="submit"]').click();
           await page.getByText('E-postana gelen doğrulama bağlantısını aç, ardından giriş yap.',{exact:true}).waitFor();

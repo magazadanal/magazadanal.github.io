@@ -82,7 +82,7 @@
   const searchCache = new Map(); let nextSearchAt = 0;
   function choosePoint(initial, onChoose, storeName = "", searchPlaces = null) {
     const view = modal("Konum seç");
-    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : "") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
+    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : " Bu konumu kullan seçildiğinde adres alanlarını doldurmak için yalnız işaretlediğin koordinatlar sunucumuz üzerinden Photon (komoot) hizmetine iletilir; ad, telefon ve hesap bilgilerin gönderilmez.") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
     function openMap() {
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
       let selected = R.point(initial?.latitude, initial?.longitude) ? [initial.latitude, initial.longitude] : null;
@@ -484,14 +484,45 @@
       }
       inputs.district = field(grid, "İlçe", "district", address.district || "", "select", { values: [{ label: "İlçe seç", value: "" }, ...R.districts] });
       for (const [key, label] of [["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) inputs[key] = field(grid, label, key, address[key], "text", { max: 500 });
-      const locationButton = button("", () => choosePoint(address, (p) => { Object.assign(address, p); label(); onChange(); }));
+      let lookupVersion = 0;
+      const feedback = el("p", undefined, "muted"); feedback.setAttribute("role", "status"); feedback.hidden = true;
+      const locationButton = button("", () => choosePoint(address, async (p) => {
+        if (!feedback.isConnected || parent.closest("[data-panel]")?.hidden || !owner || busy || frozen) return;
+        Object.assign(address, p); label(); onChange();
+        clearResolvedAddressError();
+        const attempt = ++lookupVersion, version = epoch, customer = owner;
+        const baseline = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value]));
+        const current = () => attempt === lookupVersion && epoch === version && owner === customer && feedback.isConnected && !parent.closest("[data-panel]")?.hidden
+          && address.latitude === p.latitude && address.longitude === p.longitude;
+        feedback.textContent = "Adres bilgileri alınıyor…"; feedback.hidden = false;
+        try {
+          const data = await host.api("/functions/v1/web-address-lookup", {method: "POST", body: {latitude: p.latitude, longitude: p.longitude}});
+          if (!current()) return;
+          let filled = 0;
+          for (const key of ["district", "neighborhood", "address_line", "building_no"]) {
+            const value = data?.address?.[key];
+            if (typeof value !== "string" || !value.trim() || value.length > 200 || /[<>\u0000-\u001f\u007f]/u.test(value)
+              || (key === "district" && !R.districts.includes(value)) || inputs[key].value !== baseline[key]) continue;
+            inputs[key].value = value; address[key] = value; filled++;
+          }
+          if (filled) { address.city = "İstanbul"; onChange(); clearResolvedAddressError(); }
+          feedback.hidden = filled > 0;
+          feedback.textContent = filled ? "" : "Adres otomatik bulunamadı. Alanları elle doldurabilirsin.";
+        } catch {
+          if (current()) { feedback.textContent = "Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin."; feedback.hidden = false; }
+        }
+      }));
+      function clearResolvedAddressError() {
+        if (parent.closest("[data-panel]")?.dataset.panel !== "cart") return;
+        try { R.validateAddress(address); message(""); } catch { /* An incomplete address still needs its remaining fields. */ }
+      }
       function label() { locationButton.textContent = R.point(address.latitude, address.longitude) ? "Teslimat konumu seçildi · Değiştir" : "Teslimat konumu seç"; }
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
         address[key] = input.value;
-        if (["district", "neighborhood", "address_line", "building_no"].includes(key)) { delete address.latitude; delete address.longitude; label(); }
+        if (["district", "neighborhood", "address_line"].includes(key)) { lookupVersion++; feedback.hidden = true; delete address.latitude; delete address.longitude; label(); }
         onChange();
       });
-      label(); parent.append(locationButton);
+      label(); parent.append(locationButton, feedback);
     }
     function cartPage() {
       showBack();
@@ -532,7 +563,7 @@
       const addressFields = el("div", undefined, savedAddressSelected ? "recipient-only" : "delivery-address-fields"); cartPanel.append(addressFields);
       addressForm(addressFields, draft.address, () => { if (!savedAddressSelected) draft.addressID = null; mutate(); }, { recipientOnly: savedAddressSelected });
       cartPanel.append(button("Ödemeye geç", () => {
-        try { R.validate(draft, stores); checkout = true; save(); cartPage(); window.scrollTo(0, 0); }
+        try { R.validate(draft, stores); message(""); checkout = true; save(); cartPage(); window.scrollTo(0, 0); }
         catch (e) { message(e.message); }
       }, "button primary-button"));
     }

@@ -1087,7 +1087,10 @@
   document.getElementById("signup-form").addEventListener("submit", async (event) => {
     event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector("button[type=submit]");
     const value = (id) => document.getElementById(`signup-${id}`).value.trim();
-    const name = value("name"), email = value("email"), phone = normalizePhone(value("phone"));
+    let name;
+    try { name = MAOrderRules.signupName(value("name"), value("surname")); }
+    catch (error) { return showStatus(elements.authStatus, error.message, "error"); }
+    const email = value("email"), phone = normalizePhone(value("phone"));
     const password = document.getElementById("signup-password").value;
     if (name.length < 2 || name.length > 100 || !email.includes("@") || !phone || password.length < 8 || password.length > 72 || password !== document.getElementById("signup-confirm").value) return showStatus(elements.authStatus, "Bilgileri ve aynı yazılan iki şifreyi kontrol et.", "error");
     submit.disabled = true;
