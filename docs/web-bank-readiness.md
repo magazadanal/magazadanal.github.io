@@ -240,3 +240,20 @@ Fiyatlar, ödeme onayı, sözleşmeler, RLS ve yönetici cihaz kilidi değişmez
   catalog `f4d0278a98d0b67dca363cc2ebc4b9378df62ac3897d3b1e4af5611d7060e9a6`;
   Leaflet JS `db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a`;
   Leaflet CSS `a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6`.
+
+## Customer Request Controls - 2026-11-13
+
+The approved scoped follow-up keeps only the latest unanswered alternative
+or extra-payment request actionable for the same order/current assignment.
+Older/answered records remain in history. Exact request IDs, server
+authorization, amounts and bank confirmation remain unchanged. Web guards
+double clicks, detached buttons and late logout responses; timestamp
+selection preserves microseconds before UUID ties. No backend or security
+configuration change is included.
+
+Verification: 96 Node tests, eight new synthetic request browser scenarios,
+and existing extra-payment (7), full-order (5), history/tracking (4),
+tracking viewport/theme (5) and photo (23) cases passed. All backend
+requests in browser tests were mocked; no real account/order/payment was
+created. Publication requires the existing GitHub and Cloudflare checks;
+post-release source/header verification is recorded in the native audit.

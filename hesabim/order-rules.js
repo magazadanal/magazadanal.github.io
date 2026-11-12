@@ -193,14 +193,23 @@
   }
   function extraPaymentDetails(rows, orderID, request, events) {
     if (!UUID.test(orderID) || !UUID.test(request?.id) || !Array.isArray(rows) || rows.length !== 1 || !Array.isArray(events)) throw Error("Ek ödeme bilgileri doğrulanamadı.");
-    const current = events.filter(e => e.order_id === orderID && e.action === "extra_payment_requested" && e.current_assignment === true)
-      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || String(a.id).localeCompare(String(b.id))).at(-1);
+    const current = currentOrderRequest(events, orderID, "extra_payment_requested");
     if (current?.id !== request.id || !Number.isFinite(Date.parse(current.created_at)) || events.some(e => e.order_id === orderID && e.request_id === request.id && ["extra_payment_reported", "extra_payment_confirmed"].includes(e.action))) throw Error("Ek ödeme talebi değişti. Güncel siparişi kontrol et.");
     const row = rows[0], cents = paymentCents(row.amount);
     if (!UUID.test(row.id) || row.order_id !== orderID || row.purpose !== "adjustment" || row.direction !== "charge" || row.method !== "bank_transfer" || row.status !== "pending"
       || !/^EK-[A-F0-9]{12}$/.test(row.transfer_code || "") || cents !== paymentCents(request.amount) || cents !== paymentCents(current.amount)
       || !Number.isFinite(Date.parse(row.created_at)) || Date.parse(row.created_at) > Date.parse(current.created_at)) throw Error("Ek ödeme kaydı talep ile eşleşmiyor.");
     return {paymentID: row.id, requestID: request.id, code: row.transfer_code, amount: cents / 100};
+  }
+  function currentOrderRequest(events, orderID, action) {
+    if (!Array.isArray(events) || !UUID.test(orderID) || !["alternative_requested", "extra_payment_requested"].includes(action)) return null;
+    const requests = events.filter(event => event?.order_id === orderID && event.action === action);
+    if (new Set(requests.map(event => event.id)).size !== requests.length) return null;
+    try { requests.forEach(orderCursor); } catch { return null; }
+    const latest = requests.sort(newestOrderFirst)[0];
+    if (!latest || latest.current_assignment !== true) return null;
+    const responses = action === "alternative_requested" ? ["alternative_approved", "alternative_rejected"] : ["extra_payment_reported", "extra_payment_confirmed"];
+    return events.some(event => event?.order_id === orderID && event.request_id === latest.id && responses.includes(event.action)) ? null : latest;
   }
   function orderCursor(row) {
     if (!UUID.test(row?.id || "") || typeof row.created_at !== "string"
@@ -225,5 +234,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });
