@@ -36,6 +36,7 @@ async function main() {
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co");
         const p = url.pathname; const body = route.request().postDataJSON(); let result;
         if (p.endsWith("get_public_runtime_status")) result = [{ customer_web_account_enabled: true, customer_ordering_enabled: scenario !== "maintenance" }];
+        else if (p === "/functions/v1/web-address-lookup") result = { address: {} };
         else if (p === "/auth/v1/token") result = { access_token: "mock-access", refresh_token: "mock-refresh", expires_in: 3600, user: { id: refreshIdentity, email: "test@example.invalid" } };
         else if (p === "/rest/v1/profiles") result = [{ id: owner, full_name: "Test", phone: "+905301234567", role: "customer", is_active: true }];
         else if (p === "/rest/v1/customer_addresses") result = addresses;

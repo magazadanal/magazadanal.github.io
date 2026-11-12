@@ -185,5 +185,22 @@
     }
     return { ...row, amountChanged: Math.abs(row.amount - expectedAmount) > 0.005 };
   }
-  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result };
+  function paymentCents(value) {
+    const amount = typeof value === "number" ? value : typeof value === "string" && /^(0|[1-9][0-9]{0,7})(\.[0-9]{1,2})?$/.test(value) ? Number(value) : NaN;
+    const cents = Math.round(amount * 100);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 99999999 || Math.abs(amount * 100 - cents) > 0.0001) throw Error("Ek ödeme tutarı doğrulanamadı.");
+    return cents;
+  }
+  function extraPaymentDetails(rows, orderID, request, events) {
+    if (!UUID.test(orderID) || !UUID.test(request?.id) || !Array.isArray(rows) || rows.length !== 1 || !Array.isArray(events)) throw Error("Ek ödeme bilgileri doğrulanamadı.");
+    const current = events.filter(e => e.order_id === orderID && e.action === "extra_payment_requested" && e.current_assignment === true)
+      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || String(a.id).localeCompare(String(b.id))).at(-1);
+    if (current?.id !== request.id || !Number.isFinite(Date.parse(current.created_at)) || events.some(e => e.order_id === orderID && e.request_id === request.id && ["extra_payment_reported", "extra_payment_confirmed"].includes(e.action))) throw Error("Ek ödeme talebi değişti. Güncel siparişi kontrol et.");
+    const row = rows[0], cents = paymentCents(row.amount);
+    if (!UUID.test(row.id) || row.order_id !== orderID || row.purpose !== "adjustment" || row.direction !== "charge" || row.method !== "bank_transfer" || row.status !== "pending"
+      || !/^EK-[A-F0-9]{12}$/.test(row.transfer_code || "") || cents !== paymentCents(request.amount) || cents !== paymentCents(current.amount)
+      || !Number.isFinite(Date.parse(row.created_at)) || Date.parse(row.created_at) > Date.parse(current.created_at)) throw Error("Ek ödeme kaydı talep ile eşleşmiyor.");
+    return {paymentID: row.id, requestID: request.id, code: row.transfer_code, amount: cents / 100};
+  }
+  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails };
 });
