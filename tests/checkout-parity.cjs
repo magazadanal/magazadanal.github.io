@@ -40,6 +40,7 @@ async function main() {
         } else if (url.pathname === "/rest/v1/customer_billing_profiles") data = [{ invoice_type: "individual", company_name: "Preserved Company", billing_address: "Preserved address" }];
         else if (url.pathname === "/rest/v1/customer_profile_photos") data = [];
         else if (["/rest/v1/orders", "/rest/v1/customer_addresses", "/rest/v1/rpc/list_order_activity", "/rest/v1/rpc/list_support_tickets_v3"].includes(url.pathname)) data = [];
+        else if (url.pathname === "/functions/v1/web-address-lookup") data = { address: {} };
         else throw Error(`Unexpected request/write: ${url.pathname}`);
         return route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
       });

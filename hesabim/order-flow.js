@@ -838,6 +838,7 @@
       },
       photo: showPhoto,
       map: choosePoint,
+      bankDetails,
       showDocuments(rows) {
         const view = modal("Sipariş sözleşmeleri");
         if (!rows?.length) view.body.append(el("p", "Bu sipariş için belge bulunamadı."));

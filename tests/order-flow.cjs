@@ -144,7 +144,7 @@ async function main() {
       assert.equal(await page.getByText("TEST-TRANSFER", { exact: true }).count(), width === 768 ? 0 : 1);
       if (width === 768) assert.ok(await page.getByText("Sunucu tutarı sepet tahmininden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste.", { exact: true }).isVisible());
       await page.getByRole("button", { name: "Siparişi takip et", exact: true }).click();
-      await page.getByText("Sipariş 000001", { exact: true }).waitFor();
+      await page.locator('#orders-list').getByText("Sipariş 000001", { exact: true }).waitFor();
       if (width === 390 && theme === "light") {
         delivered = true; await page.clock.fastForward(16000);
         await page.locator("#orders-list .empty-state").waitFor();

@@ -82,6 +82,7 @@
     historyList: document.getElementById("history-list"),
     addressesList: document.getElementById("addresses-list"),
     supportForm: document.getElementById("support-form"),
+    supportOrder: document.getElementById("support-order"),
     supportMessage: document.getElementById("support-message"),
     supportCharacterCount: document.getElementById("support-character-count"),
     supportSubmit: document.getElementById("support-submit"),
@@ -330,6 +331,9 @@
     elements.profilePhone.textContent = "-";
     elements.supportMessage.value = "";
     elements.supportMessage.readOnly = false;
+    elements.supportOrder.value = "";
+    elements.supportOrder.disabled = false;
+    delete elements.supportForm.dataset.orderID;
     delete elements.supportForm.dataset.requestID;
   }
 
@@ -518,8 +522,24 @@
     const products = element("div"); card.append(products);
     for (const product of order.order_items || []) {
       const row = element("div", "order-item-compact");
-      const detail = element("div"); detail.append(element("strong", "", product.store_name), element("p", "", product.product_name), element("p", "", `${product.size || ""} · ${product.color || ""} · ${formatMoney(product.final_price ?? product.estimated_price)}`)); row.append(detail); products.append(row);
+      const detail = element("div"); detail.append(element("strong", "", product.store_name), element("p", "", product.product_name), element("p", "", `${product.size || ""} · ${product.color || ""} · ${formatMoney(product.final_price ?? product.estimated_price)}`));
+      if (product.store_branch) detail.append(element("p", "muted", `Şube ${product.store_branch}`));
+      if (product.order_note) detail.append(element("p", "muted", product.order_note));
+      row.append(detail); products.append(row);
     }
+    if (!ACTIVE_ORDER_STATUSES.has(order.status) && order.delivery_address_snapshot && typeof order.delivery_address_snapshot === "object") {
+      const address = order.delivery_address_snapshot;
+      card.append(element("p", "", `Teslimat adresi: ${MAOrderRules.addressSummary(address)}`));
+      if (address.customer_name) card.append(element("p", "", `Alıcı: ${address.customer_name}`));
+      if (address.customer_phone) card.append(element("p", "", `Telefon: ${address.customer_phone}`));
+      card.append(element("p", "", `Ödeme yöntemi: ${{bank_transfer: "Havale / EFT", card: "Banka / kredi kartı"}[order.payment_method] || "Belirtilmedi"}`));
+    }
+    const contact = element("button", "button compact-button", "Bize Ulaşın"); contact.type = "button";
+    contact.addEventListener("click", () => {
+      openView("support");
+      if (elements.supportForm.dataset.requestID) return;
+      elements.supportOrder.value = order.id; persistSupport();
+    }); card.append(contact);
     const extras = element("div"); card.append(extras);
     const documentButton = element("button", "text-button", "Sipariş sözleşmeleri"); documentButton.type = "button";
     documentButton.addEventListener("click", async () => {
@@ -535,7 +555,43 @@
       for (const request of events.filter((a) => ["alternative_requested", "extra_payment_requested"].includes(a.action) && a.current_assignment !== false && MAOrderRules.UUID.test(a.id))) {
         if (events.some((a) => a.request_id === request.id && ["alternative_approved", "alternative_rejected", "extra_payment_confirmed", "extra_payment_reported"].includes(a.action))) continue;
         const box = element("div", "app-disclosure"); box.append(element("p", "", activityText(request)));
-        const choices = request.action === "alternative_requested" ? [["Onayla", "alternative_approved"], ["Reddet", "alternative_rejected"]] : [["Ek ödemeyi yaptım, kontrol edilsin", "extra_payment_reported"]];
+        if (request.action === "extra_payment_requested") {
+          const owner = state.session?.user?.id, generation = state.generation;
+          const selection = element("label", "choice-row"), selected = element("input"); selected.type = "radio"; selected.name = `extra-payment-${request.id}`;
+          selection.append(selected, element("strong", "", "Havale / EFT")); box.append(selection);
+          const bank = element("div"), feedback = element("p", "status"); feedback.setAttribute("role", "status"); feedback.hidden = true;
+          const command = element("button", "button compact-button", "Havale Yaptım, Bildir"); command.type = "button"; command.disabled = true;
+          box.append(bank, feedback, command); let verified = null;
+          const current = () => box.isConnected && generation === state.generation && owner === state.session?.user?.id;
+          async function loadDetails() {
+            const rows = await api(`/rest/v1/payments?select=id,order_id,purpose,direction,method,status,amount,transfer_code,created_at&order_id=eq.${order.id}&purpose=eq.adjustment&direction=eq.charge&method=eq.bank_transfer&status=eq.pending&order=created_at.desc,id.desc&limit=2`);
+            const latest = await api("/rest/v1/rpc/list_order_activity", {method: "POST", body: {target_order_ids: [order.id]}});
+            return MAOrderRules.extraPaymentDetails(rows, order.id, request, latest);
+          }
+          selected.addEventListener("change", async () => {
+            command.disabled = true; verified = null; bank.replaceChildren(); showStatus(feedback, "Ek ödeme bilgileri alınıyor…");
+            try {
+              const details = await loadDetails(); if (!current() || !selected.checked) return;
+              verified = details; orderFlow.bankDetails(bank, details.code);
+              bank.append(element("p", "", `Ödeme tutarı: ${formatMoney(details.amount)}`)); showStatus(feedback, ""); command.disabled = false;
+            } catch { if (current()) { selected.checked = false; showStatus(feedback, "Ek ödeme bilgileri doğrulanamadı. Tekrar Havale / EFT seçerek deneyebilirsin.", "error"); } }
+          });
+          command.addEventListener("click", async () => {
+            if (!verified || !selected.checked || !current()) return;
+            const reviewed = verified; command.disabled = true; selected.disabled = true;
+            try {
+              const fresh = await loadDetails();
+              if (!current()) return;
+              if (fresh.paymentID !== reviewed.paymentID || fresh.code !== reviewed.code || fresh.amount !== reviewed.amount) throw Error();
+              const result = await api("/rest/v1/rpc/customer_respond_to_order_request", {method: "POST", body: {target_order_id: order.id, target_request_id: request.id, response_name: "extra_payment_reported"}});
+              if (!["success", "already_responded", true].includes(result)) throw Error();
+              if (current()) await loadPortal({quiet: true});
+            } catch { if (current()) { verified = null; selected.checked = false; bank.replaceChildren(); showStatus(feedback, "Ek ödeme bildirimi doğrulanamadı. Güncel bilgileri yeniden kontrol et.", "error"); } }
+            finally { selected.disabled = false; command.disabled = !verified || !selected.checked; }
+          });
+          card.append(box); continue;
+        }
+        const choices = [["Onayla", "alternative_approved"], ["Reddet", "alternative_rejected"]];
         for (const [label, response] of choices) {
           const command = element("button", "button compact-button", label); command.type = "button";
           command.addEventListener("click", async () => {
@@ -650,6 +706,17 @@
   }
 
   function renderSupport() {
+    const pending = elements.supportForm.dataset.requestID;
+    const selected = pending ? elements.supportForm.dataset.orderID || "" : elements.supportOrder.value;
+    const general = element("option", "", "Genel konu"); general.value = "";
+    elements.supportOrder.replaceChildren(general);
+    for (const order of state.orders) {
+      const option = element("option", "", `Sipariş ${orderCode(order)}`); option.value = order.id; elements.supportOrder.append(option);
+    }
+    if (pending && MAOrderRules.UUID.test(selected) && !state.orders.some(order => order.id === selected)) {
+      const previous = element("option", "", "Bekleyen mesajın siparişi"); previous.value = selected; elements.supportOrder.append(previous);
+    }
+    elements.supportOrder.value = selected; elements.supportOrder.disabled = !!pending;
     if (!state.supportTickets.length) {
       renderEmpty(elements.supportList, "Mesaj geçmişi boş", "Gönderdiğin destek mesajları burada görünecek.");
       return;
@@ -724,7 +791,7 @@
   }
 
   async function fetchOrders() {
-    return api(`/rest/v1/orders?select=id,order_no,status,selected_store_count,payment_method,customer_total,created_at,order_items(id,store_name,store_branch,product_name,size,color,estimated_price,final_price)&customer_id=eq.${state.session.user.id}&order=created_at.desc&limit=100`);
+    return api(`/rest/v1/orders?select=id,order_no,status,delivery_address_snapshot,selected_store_count,payment_method,customer_total,created_at,order_items(id,store_name,store_branch,product_name,order_note,size,color,estimated_price,final_price)&customer_id=eq.${state.session.user.id}&order=created_at.desc&limit=100`);
   }
 
   async function fetchSupportTickets() {
@@ -972,10 +1039,12 @@
     elements.supportCharacterCount.textContent = `${elements.supportMessage.value.length} / 2000`;
     persistSupport();
   });
-  function persistSupport(requestID = null) {
+  elements.supportOrder.addEventListener("change", () => persistSupport());
+  function persistSupport(requestID = elements.supportForm.dataset.requestID || null) {
     if (!state.session) return false;
     try {
-      sessionStorage.setItem(`magazadanal.web.support.v1.${state.session.user.id}`, JSON.stringify({ message: elements.supportMessage.value, requestID })); return true;
+      const orderID = requestID ? elements.supportForm.dataset.orderID || null : elements.supportOrder.value || null;
+      sessionStorage.setItem(`magazadanal.web.support.v1.${state.session.user.id}`, JSON.stringify({ message: elements.supportMessage.value, requestID, orderID })); return true;
     } catch { return false; }
   }
 
@@ -989,15 +1058,21 @@
     elements.supportSubmit.disabled = true;
     elements.supportMessage.readOnly = true;
     try {
+      const orderID = elements.supportForm.dataset.requestID ? elements.supportForm.dataset.orderID || null : elements.supportOrder.value || null;
+      if (orderID && !MAOrderRules.UUID.test(orderID)) throw new APIError(400);
       const requestID = elements.supportForm.dataset.requestID || crypto.randomUUID();
       elements.supportForm.dataset.requestID = requestID;
-      if (!persistSupport(requestID)) { elements.supportMessage.readOnly = false; delete elements.supportForm.dataset.requestID; throw new APIError(507); }
+      if (orderID) elements.supportForm.dataset.orderID = orderID; else delete elements.supportForm.dataset.orderID;
+      elements.supportOrder.disabled = true;
+      if (!persistSupport(requestID)) { elements.supportMessage.readOnly = false; elements.supportOrder.disabled = false; delete elements.supportForm.dataset.requestID; delete elements.supportForm.dataset.orderID; throw new APIError(507); }
       const response = await api("/rest/v1/rpc/create_support_ticket_v3", {
         method: "POST",
-        body: { p_message: message, p_category: "general", p_order_id: null, p_client_request_id: requestID }
+        body: { p_message: message, p_category: orderID ? "order_other" : "general", p_order_id: orderID, p_client_request_id: requestID }
       });
       if (response?.length !== 1 || !MAOrderRules.UUID.test(response[0].id || "")) throw new APIError(502);
       delete elements.supportForm.dataset.requestID;
+      delete elements.supportForm.dataset.orderID;
+      elements.supportOrder.disabled = false;
       elements.supportMessage.readOnly = false;
       try { sessionStorage.removeItem(`magazadanal.web.support.v1.${state.session.user.id}`); } catch { /* Memory-only draft. */ }
       elements.supportMessage.value = "";
@@ -1074,7 +1149,16 @@
       saved = sessionStorage.getItem(`magazadanal.web.view.v1.${state.session.user.id}`);
       const support = JSON.parse(sessionStorage.getItem(`magazadanal.web.support.v1.${state.session.user.id}`) || "null");
       elements.supportMessage.value = typeof support?.message === "string" ? support.message.slice(0, 2000) : "";
-      if (MAOrderRules.UUID.test(support?.requestID || "")) { elements.supportForm.dataset.requestID = support.requestID; elements.supportMessage.readOnly = true; }
+      if (MAOrderRules.UUID.test(support?.orderID || "")) {
+        if (![...elements.supportOrder.options].some(option => option.value === support.orderID)) {
+          const saved = element("option", "", "Seçili sipariş"); saved.value = support.orderID; elements.supportOrder.append(saved);
+        }
+        elements.supportOrder.value = support.orderID;
+      }
+      if (MAOrderRules.UUID.test(support?.requestID || "")) {
+        elements.supportForm.dataset.requestID = support.requestID; elements.supportMessage.readOnly = true; elements.supportOrder.disabled = true;
+        if (MAOrderRules.UUID.test(support?.orderID || "")) elements.supportForm.dataset.orderID = support.orderID;
+      }
       elements.supportCharacterCount.textContent = `${elements.supportMessage.value.length} / 2000`;
     } catch { /* Restore only available tab-local state. */ }
     const target = freshLogin ? "shop" : new URLSearchParams(location.search).get("view") || saved || "shop";
