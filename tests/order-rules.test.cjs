@@ -5,6 +5,15 @@ const path = require("node:path");
 const R = require("../hesabim/order-rules.js");
 const legal = require("../assets/legal-v6.json");
 const { stores } = require("../assets/order-catalog.json");
+test("signup requires separate nonempty first and last names without changing the existing full-name payload", () => {
+  assert.equal(R.signupName("  Test  Ad ", " Müşteri "), "Test Ad Müşteri");
+  assert.equal(R.signupName("Jean-Luc", "O'Connor"), "Jean-Luc O'Connor");
+  for (const [first, last, field] of [["", "Buyer", "Ad"], ["Buyer", " ", "Soyad"], [null, "Buyer", "Ad"], ["Buyer", "<script>", "Soyad"]]) {
+    assert.throws(() => R.signupName(first, last), new RegExp(field));
+  }
+  assert.throws(() => R.signupName("a".repeat(50), "b".repeat(50)), /100/);
+  assert.equal(R.signupName("a".repeat(49), "b".repeat(50)).length, 100);
+});
 test("short reference belongs to one owner/draft and does not change the idempotency UUID", async () => {
   const d = draft(), owner = crypto.randomUUID(), originalID = d.requestID;
   d.checkoutReference = { owner, requestID: originalID, code: "000123" };

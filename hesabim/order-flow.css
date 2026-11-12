@@ -208,6 +208,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 @media (min-width: 900px) {
   .portal-tabs, .has-product-back .product-back { top: clamp(16px, calc(100dvh - 320px), 112px); }
 }
+@media (max-width: 899px) {
+  .has-product-back > header { position: sticky; top: 0; z-index: 460; }
+  .has-product-back .product-back { position: fixed; top: 21px; left: max(16px, env(safe-area-inset-left)); margin: 0; z-index: 470; }
+  .has-product-back .theme-toggle { z-index: 480; }
+}
 @media (max-width: 540px) {
   .portal-page { padding-bottom: 96px; }
   .app-form-grid { gap: 4px; }

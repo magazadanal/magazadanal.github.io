@@ -11,6 +11,17 @@
     const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
     return { firstName: parts[0] || "", lastName: parts.slice(1).join(" ") };
   }
+  function signupName(first, last) {
+    const parts = [[first, "Ad"], [last, "Soyad"]].map(([value, label]) => {
+      if (typeof value !== "string" || !value.trim()) throw Error(`${label} alanını doldur.`);
+      const text = value.trim().replace(/\s+/g, " ");
+      if (text.length > 50 || !/\p{L}/u.test(text) || /[<>\u0000-\u001f\u007f]/u.test(text)) throw Error(`${label} alanını kontrol et.`);
+      return text;
+    });
+    const full = parts.join(" ");
+    if (full.length > 100) throw Error("Ad ve soyad toplamı en fazla 100 karakter olabilir.");
+    return full;
+  }
   function splitPhone(value, countries = []) {
     const normalized = phone(value) || String(value || "").replace(/[ ()-]/g, "");
     const codes = [...new Set(countries.map(country => country.code))].sort((a, b) => b.length - a.length);
@@ -174,5 +185,5 @@
     }
     return { ...row, amountChanged: Math.abs(row.amount - expectedAmount) > 0.005 };
   }
-  return { districts, UUID, clone, splitName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result };
+  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result };
 });
