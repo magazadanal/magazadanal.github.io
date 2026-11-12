@@ -27,5 +27,16 @@ http.createServer(async (req, res) => {
     if (probe) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'";
     res.writeHead(200, headers);
     res.end(req.method === "HEAD" ? undefined : data);
-  } catch { res.writeHead(404, { "Content-Type": "text/plain" }); res.end("Not found"); }
+  } catch {
+    // Match the hosting providers' root 404.html fallback without serving the requested file.
+    const notFound = await fs.readFile(path.join(root, "404.html")).catch(() => null);
+    res.writeHead(404, {
+      "Content-Type": notFound ? "text/html; charset=utf-8" : "text/plain; charset=utf-8",
+      "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow, noarchive",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+      "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'"
+    });
+    res.end(req.method === "HEAD" ? undefined : (notFound || "Not found"));
+  }
 }).listen(port, "127.0.0.1", () => console.log(`Local preview: http://127.0.0.1:${port}`));
