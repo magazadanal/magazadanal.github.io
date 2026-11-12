@@ -86,6 +86,13 @@ body:has(.portal-page) .theme-toggle, body:has(.legal-page) .theme-toggle { posi
 .photo-preview { width: 72px; height: 72px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--soft-teal); cursor: pointer; flex-shrink: 0; }
 .photo-preview img:not(.app-icon) { width: 100%; height: 100%; object-fit: cover; }
 .photo-preview:disabled { cursor: default; }
+.profile-photo-avatar { width: 112px; height: 112px; flex-shrink: 0; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; padding: 0; margin: 0 auto 16px; background: var(--soft-teal); overflow: hidden; }
+button.profile-photo-avatar { cursor: pointer; }
+.profile-photo-avatar img:not(.app-icon) { width: 100%; height: 100%; object-fit: cover; }
+.profile-photo-editor { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.profile-photo-editor .profile-photo-avatar { margin: 0; }
+.profile-photo-frame { position: relative; width: 112px; height: 112px; flex-shrink: 0; }
+.profile-photo-frame .app-close { position: absolute; top: 0; right: 0; width: 30px; height: 30px; padding: 5px; }
 .cart-item { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: start; gap: 12px; border-bottom: 1px solid var(--line); padding: 16px 0; }
 .cart-item-detail { display: grid; gap: 3px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
 .cart-item-detail small { color: var(--muted); }

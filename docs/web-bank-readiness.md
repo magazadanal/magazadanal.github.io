@@ -124,6 +124,51 @@ isteklerini taklit eder. `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` ile mevcut
 Chrome kullanılabilir. Üretimde test betiği çalıştırılmaz. Test görüntüleri
 sentetik müşteri/ürünle oluşturulur; gerçek banka işlemi göstermez.
 
+## 12 Kasım: Yerel Fotoğraf Eşitlemesi (Yayımlanmadı)
+
+Bu ek yalnız `codex/web-photo-parity-20261112` dalındaki yerel pakettir.
+Önceden yayımlanmış web sürümü değiştirilmedi; GitHub/Cloudflare'a bu dal
+gönderilmedi. Sunucu, RLS, hesaplar, siparişler ve mobil uygulamalar değişmedi.
+
+- Profil fotoğrafı mevcut kullanıcıya ait `customer_profile_photos` okumasıyla
+  gösterilir. Ekleme/değiştirme/kaldırma yalnız mevcut
+  `update_customer_profile_secure` üzerinden ve Kaydet ile yapılır. Ayrı
+  kullanıcı kimliği/rolü veya yeni doğrudan tablo yazma izni eklenmedi.
+- Mevcut ad, telefon ve fatura alanları korunur. Fotoğraf seçme ve pencereyi
+  kapatma kayıt oluşturmaz; okuma başarısızsa eski fotoğrafı yanlışlıkla
+  silen bir düzenleme açılmaz. Yabancı kullanıcı yanıtı reddedilir.
+- Profil görseli en fazla 640 piksel uzun kenarlı, 500.000 karakter sınırında
+  JPEG olarak yeniden kodlanır. Özgün EXIF işaretlerinin taşınmadığı test
+  edildi. Fotoğraf kalıcı tarayıcı depolamasına eklenmez. Sonradan gelen eski
+  bir okuma, yeni kaydedilen/kaldırılan fotoğrafı geri getiremez.
+- Sipariş geçmişinde ürün fotoğrafı zaten okunuyordu. Kısmi yükleme sonrası
+  tekrar deneme hatası eski kaynakla yeniden üretildi: beş fotoğraf yerine
+  sekiz küçük resim oluşuyordu. Yeni kod aynı ürünün küçük resmini değiştirir,
+  çoğaltmaz; açık kartın yükleme sırasında tekrar açılması paralel istek
+  oluşturmaz. Yalnız istenen ürün kimlikleri kabul edilir.
+- Fotoğraf ile teslim kodu bağımsız yüklenir. Fotoğraf yanıtı gecikse veya
+  başarısız olsa da mevcut yetkiyle teslim kodu alınabilir. Tamamlanan
+  sipariş için teslim kodu istenmez. Çıkıştan sonraki geç yanıtlar ve
+  ayrılmış kartların fotoğraf açma olayları kullanılmaz.
+
+Doğrulama: 87 Node testi, 23 yeni sahte-API fotoğraf tarayıcı senaryosu;
+mevcut teslimat/ödeme, profil, adres, destek, oturum, tam sipariş, takip,
+açıklama kodu, sonlandırılmış sepet ve ek ödeme tarayıcı grupları geçti.
+320/390/1280 piksel, açık/koyu tema görüntüleri yerelde incelendi. Test
+yanıtlarının tamamı taklittir; gerçek müşteri fotoğrafı okunmadı/yüklenmedi.
+Yerel kanıt: `/private/tmp/ma-photo-parity-20261112/verification.json`.
+
+Mobil kaynak değiştirilmeden iOS'un gerçek ek ödeme modeli ve talebe yanıt
+metodu yeniden derlenip sahte verilerle sınandı; kuruşlu tutar, gerçek kod,
+eski talebin reddi ve doğru talep kimliği geçti. Android'in 79 kaynak/varlık
+kontrolü de geçti. Bunlar fiziksel cihazda yeni ortak sipariş testinin yerine
+geçmez; bu kontrol kullanıcı döndüğünde yapılmalıdır. Web geçmişinin mevcut
+100 sipariş sınırı ve yenileme aralıkları bu pakette değiştirilmedi.
+
+```sh
+SITE_TEST_URL=http://127.0.0.1:8894 node tests/photo-parity-browser.cjs
+```
+
 ## Kaynaklar ve Varlıklar
 
 - [QNB site ön koşulları](https://www.qnb.com.tr/dijitalkopru/akademi/sanal-pos-nedir-10905)

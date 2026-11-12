@@ -59,7 +59,7 @@
     const view = modal("Ürün fotoğrafı");
     const img = el("img", undefined, "photo-expanded"); img.src = `data:image/jpeg;base64,${base64}`; img.alt = "Ürün"; view.body.append(img);
   }
-  async function image(file) {
+  async function image(file, { maxLength = 1048576, maxDimension = 1280 } = {}) {
     if (!file || file.size > 32 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw Error("JPEG, PNG veya WebP fotoğraf seç (en fazla 32 MB).");
     const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
     const valid = (bytes[0] === 255 && bytes[1] === 216) || (bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71)
@@ -68,13 +68,13 @@
     const bitmap = await createImageBitmap(file);
     try {
       if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 64000000) throw Error("Fotoğraf çözünürlüğü çok büyük.");
-      const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+      const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
       const ctx = canvas.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       for (const quality of [0.82, 0.65, 0.45]) {
         const value = canvas.toDataURL("image/jpeg", quality).split(",")[1];
-        if (value.length <= 1048576) return value;
+        if (value.length <= maxLength) return value;
       }
       throw Error("Fotoğraf küçültülemedi; başka bir fotoğraf seç.");
     } finally { bitmap.close(); }
@@ -154,6 +154,9 @@
     let stores = [], countries = [], legal = null, owner = null, profile = null, addresses = [], runtime = null, currentView = "shop";
     let draft = R.newDraft(), stage = "stores", editing = null, checkout = false, frozen = null, busy = false, loaded = false, epoch = 0;
     let accepted = null, serviceAccepted = false, profileAcks = [];
+    let profilePhoto = "", profilePhotoLoad = null, profilePhotoRevision = 0;
+    const profilePhotoButton = document.getElementById("profile-photo");
+    const profilePhotoStatus = document.getElementById("profile-photo-status");
     let referenceEnabled = false, referenceLoading = false, referenceError = "", referenceAttempt = null, draftLease = null;
     const productPanel = document.getElementById("order-flow");
     const cartPanel = document.getElementById("cart-flow");
@@ -194,6 +197,34 @@
     const key = () => `magazadanal.web.draft.v1.${owner}`;
     const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0);
     const rpc = (name, body = {}) => host.api(`/rest/v1/rpc/${name}`, { method: "POST", body });
+    function renderProfilePhoto() {
+      profilePhotoButton.replaceChildren();
+      if (/^\/9j\/[A-Za-z0-9+/=]+$/.test(profilePhoto) && profilePhoto.length <= 500000) {
+        const preview = el("img"); preview.src = `data:image/jpeg;base64,${profilePhoto}`; preview.alt = "Profil fotoğrafı";
+        profilePhotoButton.append(preview);
+      } else profilePhotoButton.append(icon("image"));
+    }
+    async function readProfilePhoto(customer) {
+      const rows = await host.api(`/rest/v1/customer_profile_photos?select=user_id,photo_base64&user_id=eq.${customer}`);
+      if (!Array.isArray(rows) || rows.length > 1 || (rows.length && (rows[0]?.user_id !== customer
+        || (rows[0].photo_base64 !== null && typeof rows[0].photo_base64 !== "string")))) throw Error("Profil fotoğrafı doğrulanamadı.");
+      return rows[0]?.photo_base64 || "";
+    }
+    async function loadProfilePhoto() {
+      if (!owner || profilePhotoLoad) return profilePhotoLoad;
+      const version = epoch, customer = owner, revision = profilePhotoRevision;
+      const operation = (async () => {
+        try {
+          const value = await readProfilePhoto(customer);
+          if (version !== epoch || revision !== profilePhotoRevision) return;
+          profilePhoto = value; renderProfilePhoto(); profilePhotoStatus.hidden = true;
+        } catch {
+          if (version === epoch && revision === profilePhotoRevision) { profilePhotoStatus.textContent = "Profil fotoğrafı şu anda alınamıyor."; profilePhotoStatus.hidden = false; }
+        }
+      })();
+      profilePhotoLoad = operation;
+      try { await operation; } finally { if (profilePhotoLoad === operation) profilePhotoLoad = null; }
+    }
     const allowed = () => owner && profile?.is_active && profile.role === "customer" && runtime?.customer_ordering_enabled === true && runtime?.maintenance_enabled !== true;
     function save() {
       if (!owner) return;
@@ -805,6 +836,7 @@
       if (!loaded) return;
       if (stage === "product" && editing) productPage(); else storePage();
       cartPage(); renderAddresses(); updateCartCount();
+      if (currentView === "profile") void loadProfilePhoto();
     }
     const ready = init();
     return {
@@ -813,6 +845,7 @@
         if (changed) {
           releaseDraftLease(); referenceAttempt = null; referenceLoading = false; referenceError = "";
           epoch++; document.querySelectorAll(".app-dialog").forEach((n) => n.close());
+          profilePhoto = ""; profilePhotoLoad = null; renderProfilePhoto(); profilePhotoStatus.hidden = true;
           owner = data.owner; draft = R.newDraft(); frozen = null; accepted = null; serviceAccepted = false; stage = "stores"; editing = null; checkout = false;
           if (owner) try {
             const stored = JSON.parse(sessionStorage.getItem(key()));
@@ -830,7 +863,7 @@
         const reconciled = reconcileOrders(data.orders);
         if (changed || reconciled) render(); else renderAddresses();
       },
-      show(view) { currentView = view; showBack(); if (!loaded) return; if (view === "shop") { if (stage === "product" && editing) productPage(); else storePage(); } if (view === "cart") cartPage(); },
+      show(view) { currentView = view; showBack(); if (!loaded) return; if (view === "shop") { if (stage === "product" && editing) productPage(); else storePage(); } if (view === "cart") cartPage(); if (view === "profile") void loadProfilePhoto(); },
       clear() {
         searchCache.clear();
         if (owner) try { sessionStorage.removeItem(key()); } catch { /* Memory-only browser. */ }
@@ -848,17 +881,32 @@
         }
       },
       async editProfile() {
-        const version = epoch;
+        const version = epoch, customer = owner;
         try {
-          await ready; if (!loaded || version !== epoch) return;
-          const [billings, photos] = await Promise.all([
-            host.api(`/rest/v1/customer_billing_profiles?select=identity_number,invoice_type,company_name,tax_office,tax_number,billing_address,postal_code&user_id=eq.${owner}`),
-            host.api(`/rest/v1/customer_profile_photos?select=photo_base64&user_id=eq.${owner}`)
+          await ready; if (!loaded || version !== epoch || !customer) return;
+          const [billings, savedPhoto] = await Promise.all([
+            host.api(`/rest/v1/customer_billing_profiles?select=identity_number,invoice_type,company_name,tax_office,tax_number,billing_address,postal_code&user_id=eq.${customer}`),
+            readProfilePhoto(customer)
           ]);
           if (version !== epoch) return;
           const billing = billings?.[0] || {};
           const view = modal("Profil ve fatura bilgileri");
           const form = el("form", undefined, "app-form"); form.noValidate = true;
+          let selectedPhoto = savedPhoto, processingPhoto = false, saving = false;
+          const photoField = el("div", undefined, "profile-photo-editor");
+          const preview = el("div", undefined, "profile-photo-avatar");
+          const input = el("input"); input.type = "file"; input.name = "profile_photo"; input.accept = "image/jpeg,image/png,image/webp"; input.hidden = true; input.setAttribute("aria-label", "Profil fotoğrafı seç");
+          const choose = button("Fotoğraf seç", () => input.click());
+          const remove = button("", () => { selectedPhoto = ""; input.value = ""; refreshPhoto(); }, "app-close"); remove.append(icon("close")); remove.title = "Profil fotoğrafını kaldır"; remove.setAttribute("aria-label", "Profil fotoğrafını kaldır");
+          function refreshPhoto() {
+            preview.replaceChildren();
+            if (/^\/9j\/[A-Za-z0-9+/=]+$/.test(selectedPhoto) && selectedPhoto.length <= 500000) {
+              const img = el("img"); img.src = `data:image/jpeg;base64,${selectedPhoto}`; img.alt = "Seçilen profil fotoğrafı"; preview.append(img);
+            } else preview.append(icon("image"));
+            choose.textContent = selectedPhoto ? "Fotoğrafı değiştir" : "Fotoğraf seç"; remove.hidden = !selectedPhoto;
+          }
+          const frame = el("div", undefined, "profile-photo-frame"); frame.append(preview, remove);
+          photoField.append(frame, input, choose); form.append(photoField); refreshPhoto();
           const parts = R.splitName(profile.full_name);
           const firstName = field(form, "Ad", "profile_first_name", parts.firstName, "text", { max: 100, autocomplete: "given-name" });
           const lastName = field(form, "Soyad", "profile_last_name", parts.lastName, "text", { max: 100, autocomplete: "family-name" });
@@ -870,19 +918,32 @@
           const syncInvoice = () => corporateFields.forEach(key => { fields[key].parentElement.hidden = fields.invoice_type.value !== "corporate"; });
           fields.invoice_type.addEventListener("change", syncInvoice); syncInvoice();
           const feedback = el("div"); view.body.append(form, feedback);
+          input.addEventListener("change", async () => {
+            if (saving || processingPhoto || !input.files[0]) return;
+            processingPhoto = true; choose.disabled = true; remove.disabled = true; saveButton.disabled = true;
+            try {
+              const value = await image(input.files[0], { maxLength: 500000, maxDimension: 640 });
+              if (version !== epoch || !view.dialog.isConnected) return;
+              selectedPhoto = value; refreshPhoto(); status(feedback, "");
+            } catch (error) { if (version === epoch && view.dialog.isConnected) status(feedback, error.message || "Fotoğraf işlenemedi.", true); }
+            finally { processingPhoto = false; choose.disabled = false; remove.disabled = false; saveButton.disabled = false; input.value = ""; }
+          });
           const saveButton = button("Kaydet", async () => {
-            saveButton.disabled = true;
+            if (saving || processingPhoto || version !== epoch || !view.dialog.isConnected) return;
+            saving = true; saveButton.disabled = true; form.querySelectorAll("input, select, button").forEach(node => { node.disabled = true; });
             try {
               if (version !== epoch) return;
               const fullName = [firstName.value.trim(), lastName.value.trim()].join(" ");
               if (!firstName.value.trim() || !lastName.value.trim() || fullName.length > 100 || !phone.value()) throw Error("Ad, soyad ve telefonunu kontrol et.");
-              const body = { p_full_name: fullName, p_phone: phone.value(), p_photo_base64: photos?.[0]?.photo_base64 || "" };
+              const body = { p_full_name: fullName, p_phone: phone.value(), p_photo_base64: selectedPhoto };
               for (const [key, input] of Object.entries(fields)) body[`p_${key}`] = input.value.trim();
               const result = await rpc("update_customer_profile_secure", body);
               if (version !== epoch) return;
               if (![true, "success", "updated"].includes(result)) throw Error("Bilgiler kaydedilemedi. Fatura ve kimlik bilgilerini kontrol et.");
+              profilePhotoRevision++; profilePhoto = selectedPhoto; renderProfilePhoto(); profilePhotoStatus.hidden = true;
               view.dialog.close(); await host.refresh();
-            } catch (e) { status(feedback, e.message || "Bilgiler kaydedilemedi.", true); } finally { saveButton.disabled = false; }
+            } catch (e) { if (version === epoch && view.dialog.isConnected) status(feedback, e.message || "Bilgiler kaydedilemedi.", true); }
+            finally { saving = false; saveButton.disabled = false; form.querySelectorAll("input, select, button").forEach(node => { node.disabled = false; }); }
           }, "button primary-button"); view.footer.append(saveButton);
         } catch { host.error("Profil bilgileri alınamadı. Biraz sonra tekrar dene."); }
       }
