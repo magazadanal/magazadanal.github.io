@@ -606,31 +606,50 @@
         } card.append(box);
       }
     }
-    let detailsLoaded = false;
+    let detailsLoading = false, photosLoaded = false, codeLoaded = !ACTIVE_ORDER_STATUSES.has(order.status);
+    const detailStatus = element("p", "muted"); detailStatus.hidden = true; extras.append(detailStatus);
     card.addEventListener("toggle", async () => {
-      if (!card.open || detailsLoaded) return;
+      if (!card.open || detailsLoading || (photosLoaded && codeLoaded)) return;
       const version = state.generation;
-      detailsLoaded = true;
+      const current = () => version === state.generation && card.isConnected;
+      detailsLoading = true; detailStatus.hidden = true;
+      // A slow or failed photo request must not hold up the delivery code.
+      const photosTask = (async () => {
       try {
-        const ids = (order.order_items || []).map((i) => i.id).filter((id) => MAOrderRules.UUID.test(id));
-        for (let i = 0; i < ids.length; i += 3) {
-          const photos = await api("/rest/v1/rpc/get_order_product_photos", { method: "POST", body: { target_item_ids: ids.slice(i, i + 3) } });
-          if (version !== state.generation || !card.isConnected) return;
-          for (const photo of photos || []) {
-            if (!/^\/9j\/[A-Za-z0-9+/=]+$/.test(photo.photo_base64 || "") || photo.photo_base64.length > 1048576) continue;
-            const index = (order.order_items || []).findIndex((p) => p.id === photo.order_item_id);
-            if (index < 0) continue;
-            const thumb = element("button", "photo-preview"); thumb.type = "button"; thumb.title = "Ürün fotoğrafını büyüt";
-            const img = element("img"); img.src = `data:image/jpeg;base64,${photo.photo_base64}`; img.alt = "Ürün fotoğrafı"; thumb.append(img); thumb.addEventListener("click", () => orderFlow.photo(photo.photo_base64)); products.children[index].prepend(thumb);
+        const ids = [...new Set((order.order_items || []).map((i) => i.id).filter((id) => MAOrderRules.UUID.test(id)))];
+        if (!photosLoaded) {
+          for (let i = 0; i < ids.length; i += 3) {
+            const batch = ids.slice(i, i + 3);
+            const photos = await api("/rest/v1/rpc/get_order_product_photos", { method: "POST", body: { target_item_ids: batch } });
+            if (!current()) return;
+            if (!Array.isArray(photos)) throw Error();
+            for (const photo of photos) {
+              if (!photo || !batch.includes(photo.order_item_id) || !/^\/9j\/[A-Za-z0-9+/=]+$/.test(photo.photo_base64 || "") || photo.photo_base64.length > 1048576) continue;
+              const index = (order.order_items || []).findIndex((p) => p.id === photo.order_item_id);
+              const row = products.children[index];
+              if (!row) continue;
+              const thumb = element("button", "photo-preview"); thumb.type = "button"; thumb.title = "Ürün fotoğrafını büyüt"; thumb.setAttribute("aria-label", `${order.order_items[index].store_name || "Ürün"} fotoğrafını büyüt`);
+              const img = element("img"); img.src = `data:image/jpeg;base64,${photo.photo_base64}`; img.alt = "Ürün fotoğrafı"; thumb.append(img); thumb.addEventListener("click", () => { if (current()) orderFlow.photo(photo.photo_base64); });
+              const previous = row.querySelector(".photo-preview");
+              if (previous) previous.replaceWith(thumb); else row.prepend(thumb);
+            }
           }
+          photosLoaded = true;
         }
-        if (ACTIVE_ORDER_STATUSES.has(order.status)) {
+      } catch { if (current()) { detailStatus.textContent = "Fotoğraflar şu anda alınamıyor. Kartı kapatıp yeniden açabilirsin."; detailStatus.hidden = false; } }
+      })();
+      const codeTask = (async () => {
+      try {
+        if (current() && !codeLoaded) {
           const code = await api("/rest/v1/rpc/get_order_delivery_code", { method: "POST", body: { target_order_id: order.id } });
-          if (version !== state.generation || !card.isConnected) return;
+          if (!current()) return;
           const value = code?.[0]?.delivery_code || code?.[0]?.code;
-          if (/^\d{4}$/.test(value)) extras.append(element("p", "", "Teslim kodu"), element("strong", "delivery-code", value));
+          if (!/^\d{4}$/.test(value)) throw Error();
+          extras.append(element("p", "", "Teslim kodu"), element("strong", "delivery-code", value)); codeLoaded = true;
         }
-      } catch { detailsLoaded = false; extras.append(element("p", "muted", "Bazı ayrıntılar alınamadı. Kartı kapatıp yeniden açabilirsin.")); }
+      } catch { if (current()) { detailStatus.textContent = "Teslim kodu şu anda alınamıyor. Kartı kapatıp yeniden açabilirsin."; detailStatus.hidden = false; } }
+      })();
+      try { await Promise.all([photosTask, codeTask]); } finally { detailsLoading = false; }
     });
     const activities = state.activities
       .filter((item) => item.order_id === order.id)
@@ -1139,6 +1158,7 @@
     }
   });
   document.getElementById("profile-edit").addEventListener("click", () => orderFlow.editProfile());
+  document.getElementById("profile-photo").addEventListener("click", () => orderFlow.editProfile());
   function syncOrderFlow() {
     orderFlow?.sync({ owner: state.session?.user?.id || null, profile: state.profile, addresses: state.addresses, runtime: state.runtime, orders: state.orders });
   }

@@ -79,7 +79,7 @@ async function main() {
             assert.equal(req.method(),'POST'); assert.equal(existing,false,'Existing or inactive profiles must never be repaired');
             assert.deepEqual(req.postDataJSON(),{p_full_name:profile.full_name,p_phone:profile.phone},'Never pass role or another account ID');
             ensured++; data=scenario!=='rpc-denied'; existing=data && scenario!=='rpc-not-persisted';
-          } else if(p==='/rest/v1/orders'||p==='/rest/v1/customer_addresses'||p.endsWith('list_support_tickets_v3')) {
+          } else if(p==='/rest/v1/orders'||p==='/rest/v1/customer_addresses'||p==='/rest/v1/customer_profile_photos'||p.endsWith('list_support_tickets_v3')) {
             // Reproduce the real support RPC denial until the authenticated customer profile exists.
             status=existing?200:403; data=existing?[]:{};
           } else if(p.endsWith('list_order_activity')||p.endsWith('list_customer_legal_acknowledgements')) data=[];

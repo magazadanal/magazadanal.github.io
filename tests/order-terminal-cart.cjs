@@ -57,7 +57,7 @@ async function main() {
           orderReads++;
           if (failOrders) return route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
           data = scenario === "missing" ? [] : [{ id: scenario === "unrelated" ? "20000000-0000-4000-8000-000000000002" : orderID, order_no: "000009", status, payment_method: "bank_transfer", customer_total: 460, created_at: "2026-11-07T20:00:00Z", selected_store_count: 1, order_items: [] }];
-        } else if (url.pathname === "/rest/v1/customer_addresses" || ["list_order_activity", "list_support_tickets_v3", "get_order_delivery_code", "get_order_courier_position"].some(name => url.pathname.endsWith(name))) data = [];
+        } else if (url.pathname === "/rest/v1/customer_addresses" || url.pathname === "/rest/v1/customer_profile_photos" || ["list_order_activity", "list_support_tickets_v3", "get_order_delivery_code", "get_order_courier_position"].some(name => url.pathname.endsWith(name))) data = [];
         else { writes.push(url.pathname); throw Error(`Unexpected mutation or request ${url.pathname}`); }
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
       });

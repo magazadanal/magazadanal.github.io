@@ -42,6 +42,7 @@ async function main() {
         else if (p === "/rest/v1/orders") data = created ? [{ id: orderID, order_no: "000001", status: delivered ? "delivered" : "payment_waiting", selected_store_count: 1, customer_total: 460, created_at: new Date().toISOString(), order_items: [] }] : [];
         else if (p.endsWith("list_support_tickets_v3")) data = [{ message: "<img src=x onerror=alert(1)>", status: "closed", created_at: new Date().toISOString(), replies: [{ message: "Test yönetici yanıtı" }] }];
         else if (p.endsWith("list_order_activity")) data = [];
+        else if (p === "/rest/v1/customer_profile_photos") data = [];
         else if (p.endsWith("list_customer_legal_acknowledgements")) data = acks;
         else if (p.endsWith("record_customer_legal_acknowledgement")) { acks.push({ document_type: body.p_document_type, document_version: body.p_document_version, document_hash: body.p_document_hash }); data = true; }
         else if (p.endsWith("validate_promotion_code")) data = [{ authorized: true, result: "valid", normalized_code: "TEST10", discount_percent: 10 }];

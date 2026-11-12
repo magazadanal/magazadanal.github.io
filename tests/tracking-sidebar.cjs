@@ -34,7 +34,7 @@ async function main() {
         else if (p === "/auth/v1/token") data = { access_token: "mock-access", refresh_token: "mock-refresh", expires_in: 3600, user: { id: owner, email: "test@example.invalid" } };
         else if (p === "/rest/v1/profiles") data = [{ id: owner, role: "customer", full_name: "Test Müşteri", phone: "+905301234567", is_active: true }];
         else if (p === "/rest/v1/orders") data = [[activeID, "000101", status], [deliveredID, "000099", "delivered"], [cancelledID, "000098", "cancelled"]].map(([id, order_no, status]) => ({ id, order_no, status, customer_total: 460, selected_store_count: 1, created_at: created, order_items: [] }));
-        else if (p === "/rest/v1/customer_addresses" || p.endsWith("list_support_tickets_v3")) data = [];
+        else if (p === "/rest/v1/customer_addresses" || p === "/rest/v1/customer_profile_photos" || p.endsWith("list_support_tickets_v3")) data = [];
         else if (p.endsWith("list_order_activity")) data = [{ id: "30000000-0000-4000-8000-000000000001", order_id: activeID, action: "store_departure_started", current_assignment: true, created_at: created }];
         else if (p.endsWith("get_order_delivery_code")) { assert.equal(body.target_order_id, activeID); data = [{ delivery_code: "1234" }]; }
         else if (p.endsWith("get_order_courier_position")) {

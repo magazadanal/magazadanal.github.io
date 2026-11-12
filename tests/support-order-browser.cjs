@@ -26,7 +26,7 @@ async function main() {
         else if (url.pathname==='/rest/v1/orders') {
           assert.ok(url.searchParams.get('select').includes('order_note'));
           data=[{id:orderID,order_no:'000001',status:'delivered',payment_method:'bank_transfer',customer_total:460,created_at:'2026-11-12T11:00:00Z',delivery_address_snapshot:{summary:'Test Sokak No: 1',district:'Şişli',neighborhood:'Test Mahallesi',customer_name:'Test Alıcı',customer_phone:'+905300000001'},order_items:[{store_name:'Beymen',store_branch:'Test Şubesi',product_name:'Test Ürün',order_note:'Test sipariş notu',size:'M',color:'Siyah',estimated_price:100}]}];
-        } else if (url.pathname.endsWith('list_order_activity')||url.pathname==='/rest/v1/customer_addresses'||url.pathname.endsWith('list_support_tickets_v3')) data=[];
+        } else if (url.pathname.endsWith('list_order_activity')||url.pathname==='/rest/v1/customer_addresses'||url.pathname==='/rest/v1/customer_profile_photos'||url.pathname.endsWith('list_support_tickets_v3')) data=[];
         else if (url.pathname.endsWith('create_support_ticket_v3')) {
           submissions.push(request.postDataJSON());
           if (scenario==='order-retry'&&submissions.length===1) return route.fulfill({status:503,contentType:'application/json',body:'{}'});

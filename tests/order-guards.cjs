@@ -42,7 +42,7 @@ async function main() {
         else if (p === "/rest/v1/customer_addresses") result = addresses;
         else if (p === "/rest/v1/orders" || p.endsWith("list_order_activity") || p.endsWith("list_support_tickets_v3")) result = [];
         else if (p === "/rest/v1/customer_billing_profiles") result = [{ invoice_type: "individual", company_name: "Preserved Co", identity_number: "", billing_address: "Preserved address" }];
-        else if (p === "/rest/v1/customer_profile_photos") result = [{ photo_base64: "unchanged-photo" }];
+        else if (p === "/rest/v1/customer_profile_photos") result = [{ user_id: owner, photo_base64: "unchanged-photo" }];
         else if (p.endsWith("update_customer_profile_secure")) { mutatedProfile = body; result = "success"; }
         else if (p.endsWith("save_customer_address_v2")) {
           addressSaved = body; const address = {}; for (const [key, value] of Object.entries(body)) address[key.slice(2)] = value;
