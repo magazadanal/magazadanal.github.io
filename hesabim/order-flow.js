@@ -487,7 +487,8 @@
       let lookupVersion = 0;
       const feedback = el("p", undefined, "muted"); feedback.setAttribute("role", "status"); feedback.hidden = true;
       const locationButton = button("", () => choosePoint(address, async (p) => {
-        if (!feedback.isConnected || parent.closest("[data-panel]")?.hidden || !owner || busy || frozen) return;
+        const panel = parent.closest("[data-panel]");
+        if (!feedback.isConnected || panel?.hidden || !owner || busy || (frozen && panel?.dataset.panel === "cart")) return;
         Object.assign(address, p); label(); onChange();
         clearResolvedAddressError();
         const attempt = ++lookupVersion, version = epoch, customer = owner;

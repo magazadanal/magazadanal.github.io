@@ -10,17 +10,19 @@ const key = `magazadanal.web.draft.v1.${owner}`;
 async function main() {
   const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
   try {
-    for (const scenario of ['desktop', 'mobile', 'unavailable', 'manual-number', 'newer-pin', 'navigated-away']) {
+    for (const scenario of ['desktop', 'mobile', 'unavailable', 'manual-number', 'newer-pin', 'navigated-away', 'saved-pending-order']) {
+      const savedEditor = scenario === 'saved-pending-order';
       const context = await browser.newContext({viewport: {width: scenario === 'mobile' ? 390 : 1280, height: 950}});
       const page = await context.newPage(), errors = [], lookups = [];
       page.setDefaultTimeout(10000); page.on('pageerror', error => errors.push(error.message));
       const draft = R.newDraft();
       draft.items = [{client_item_id: crypto.randomUUID(), store: 'Beymen', branch: 'Synthetic Branch', product_name: 'Product', product_link: 'https://example.invalid/product', size: 'M', color: 'Siyah', estimated_price: 100, store_latitude: 41.07, store_longitude: 28.99}];
       draft.address = {customer_name: 'Synthetic Customer', customer_phone: '+905300000000', district: 'Şişli', neighborhood: 'Old Neighborhood', address_line: 'Old Street', building_no: '1', building_name: 'User Building Floor 1 Apartment 2', directions: 'User directions'};
-      await page.addInitScript(({owner, key, draft}) => {
+      const frozen = savedEditor ? {payload: null, expectedAmount: 460, result: {authorized: true, result: 'success', order_id: '20000000-0000-4000-8000-000000000001', amount: 460, transfer_code: '000001'}} : null;
+      await page.addInitScript(({owner, key, draft, frozen}) => {
         sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, user: {id: owner, email: 'synthetic@example.invalid'}}));
-        sessionStorage.setItem(key, JSON.stringify({owner, updated: Date.now(), draft, stage: 'stores', checkout: false, frozen: null}));
-      }, {owner, key, draft});
+        sessionStorage.setItem(key, JSON.stringify({owner, updated: Date.now(), draft, stage: 'stores', checkout: false, frozen}));
+      }, {owner, key, draft, frozen});
       let releaseFirst, startedFirst;
       const delayed = new Promise(resolve => {releaseFirst = resolve;});
       const started = new Promise(resolve => {startedFirst = resolve;});
@@ -46,15 +48,24 @@ async function main() {
         return route.fulfill({contentType: 'application/json', body: JSON.stringify(data)});
       });
       await page.goto(base + '/hesabim/?view=cart'); await page.getByRole('heading', {name: 'Sepetim', exact: true}).waitFor();
-      await page.getByRole('button', {name: 'Ödemeye geç', exact: true}).click();
-      await page.getByText('Teslimat konumunu haritadan seç.', {exact: true}).waitFor();
+      if (savedEditor) {
+        await page.getByText('Sipariş talebi alındı', {exact: true}).waitFor();
+        await page.getByRole('button', {name: 'Profil', exact: true}).click();
+        await page.getByRole('button', {name: 'Adreslerim', exact: true}).click();
+        await page.getByRole('button', {name: 'Yeni adres ekle', exact: true}).click();
+      } else {
+        await page.getByRole('button', {name: 'Ödemeye geç', exact: true}).click();
+        await page.getByText('Teslimat konumunu haritadan seç.', {exact: true}).waitFor();
+      }
       async function choose(x) {
         await page.getByRole('button', {name: /^Teslimat konumu/}).click();
         assert.equal(lookups.length, x === 140 ? 1 : 0, 'Opening a map must not transmit a coordinate to reverse lookup');
         await page.locator('.app-map').click({position: {x, y: 170}});
         await page.getByRole('button', {name: 'Bu konumu kullan', exact: true}).click();
       }
-      await choose(120); await started;
+      await choose(120);
+      await page.getByRole('button', {name: 'Teslimat konumu seçildi · Değiştir', exact: true}).waitFor();
+      await started;
       if (scenario === 'manual-number') await page.locator('[name="building_no"]').fill('99');
       if (scenario === 'newer-pin') {
         await choose(140); await page.waitForFunction(() => document.querySelector('[name="address_line"]').value === 'Newer Street');
@@ -75,11 +86,17 @@ async function main() {
         assert.equal(await page.locator('[name="neighborhood"]').inputValue(), 'Mapped Neighborhood');
         assert.equal(await page.locator('[name="building_no"]').inputValue(), scenario === 'manual-number' ? '99' : '42');
       }
-      assert.equal(await page.locator('[name="building_name"]').inputValue(), draft.address.building_name);
-      assert.equal(await page.locator('[name="directions"]').inputValue(), draft.address.directions);
+      assert.equal(await page.locator('[name="building_name"]').inputValue(), savedEditor ? '' : draft.address.building_name);
+      assert.equal(await page.locator('[name="directions"]').inputValue(), savedEditor ? '' : draft.address.directions);
       await page.locator('[name="building_no"]').fill('9');
       assert.ok(await page.getByRole('button', {name: 'Teslimat konumu seçildi · Değiştir', exact: true}).isVisible(), 'Correcting the building number preserves the chosen map point');
       assert.equal(await page.locator('#order-status').isVisible(), false, 'A valid selected location clears the old location error immediately');
+      if (savedEditor) {
+        const stored = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)), key);
+        assert.deepEqual(stored.frozen, frozen, 'A separate saved-address editor must not alter the submitted receipt');
+        await page.getByRole('dialog', {name: 'Yeni adres ekle', exact: true}).getByRole('button', {name: 'Kapat', exact: true}).click();
+        assert.deepEqual(errors, []); await context.close(); continue;
+      }
       if (scenario === 'mobile') {
         const header = await page.locator('body > header').boundingBox(), back = await page.locator('#product-back').boundingBox();
         assert.ok(back.y >= header.y && back.y + back.height <= header.y + header.height, 'Mobile back control stays in the header instead of covering address fields');
@@ -95,6 +112,6 @@ async function main() {
       assert.deepEqual(errors, []); await context.close();
     }
   } finally {await browser.close();}
-  console.log('PASS: explicit point selection fills safe address fields; failure keeps manual entry; late responses, manual corrections and newer pins are preserved; stale checkout errors cleared. Local synthetic data only.');
+  console.log('PASS: explicit points fill safe address fields, including saved addresses with a pending receipt; failures keep manual entry; late responses, manual edits and newer pins are preserved; stale checkout errors cleared. Local synthetic data only.');
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});
