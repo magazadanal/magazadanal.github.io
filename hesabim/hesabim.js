@@ -49,6 +49,10 @@
     profile: null,
     addresses: [],
     orders: [],
+    historyOrders: [],
+    historyCursor: null,
+    historyHasMore: false,
+    historyLoading: false,
     activities: [],
     supportTickets: [],
     refreshTimer: null,
@@ -80,6 +84,8 @@
     logoutButton: document.getElementById("logout-button"),
     ordersList: document.getElementById("orders-list"),
     historyList: document.getElementById("history-list"),
+    historyMore: document.getElementById("history-more"),
+    historyStatus: document.getElementById("history-status"),
     addressesList: document.getElementById("addresses-list"),
     supportForm: document.getElementById("support-form"),
     supportOrder: document.getElementById("support-order"),
@@ -313,6 +319,10 @@
     state.profile = null;
     state.addresses = [];
     state.orders = [];
+    state.historyOrders = []; state.historyCursor = null;
+    state.historyHasMore = false; state.historyLoading = false;
+    elements.historyMore.hidden = true; elements.historyMore.disabled = false;
+    hideStatus(elements.historyStatus);
     state.collapsedActiveOrders.clear();
     state.openLocationMaps.clear();
     locationControllers.forEach(controller => controller.destroy());
@@ -486,7 +496,7 @@
     }
     const timer = setInterval(() => {
       if (!card.isConnected || version !== state.generation) controller.destroy(); else void update();
-    }, 10000);
+    }, 2000);
     const onToggle = () => { if (card.open) void update(); };
     card.addEventListener("toggle", onToggle);
     const controller = {
@@ -697,7 +707,10 @@
   }
   function renderOrders() {
     renderOrderList(elements.ordersList, state.orders.filter(order => ACTIVE_ORDER_STATUSES.has(order.status)), true);
-    renderOrderList(elements.historyList, state.orders.filter(order => !ACTIVE_ORDER_STATUSES.has(order.status)), false);
+    renderOrderList(elements.historyList, state.historyOrders, false);
+    elements.historyMore.hidden = !state.historyHasMore;
+    elements.historyMore.disabled = state.historyLoading;
+    elements.historyMore.textContent = state.historyLoading ? "Yükleniyor..." : "Daha eski siparişleri göster";
   }
 
   function renderAddresses() {
@@ -729,10 +742,10 @@
     const selected = pending ? elements.supportForm.dataset.orderID || "" : elements.supportOrder.value;
     const general = element("option", "", "Genel konu"); general.value = "";
     elements.supportOrder.replaceChildren(general);
-    for (const order of state.orders) {
+    for (const order of knownOrders()) {
       const option = element("option", "", `Sipariş ${orderCode(order)}`); option.value = order.id; elements.supportOrder.append(option);
     }
-    if (pending && MAOrderRules.UUID.test(selected) && !state.orders.some(order => order.id === selected)) {
+    if (pending && MAOrderRules.UUID.test(selected) && !knownOrders().some(order => order.id === selected)) {
       const previous = element("option", "", "Bekleyen mesajın siparişi"); previous.value = selected; elements.supportOrder.append(previous);
     }
     elements.supportOrder.value = selected; elements.supportOrder.disabled = !!pending;
@@ -809,8 +822,78 @@
     return api(`/rest/v1/customer_addresses?select=id,title,city,district,neighborhood,address_line,building_no,building_name,directions,is_invoice,latitude,longitude,recipient_name,recipient_phone&customer_id=eq.${state.session.user.id}&order=created_at.desc`);
   }
 
-  async function fetchOrders() {
-    return api(`/rest/v1/orders?select=id,order_no,status,delivery_address_snapshot,selected_store_count,payment_method,customer_total,created_at,order_items(id,store_name,store_branch,product_name,order_note,size,color,estimated_price,final_price)&customer_id=eq.${state.session.user.id}&order=created_at.desc&limit=100`);
+  const orderSelection = "id,order_no,status,delivery_address_snapshot,selected_store_count,payment_method,customer_total,created_at,order_items(id,store_name,store_branch,product_name,order_note,size,color,estimated_price,final_price)";
+  async function fetchOrders(filter = "") {
+    return api(`/rest/v1/orders?select=${orderSelection}&customer_id=eq.${state.session.user.id}&order=created_at.desc,id.desc&limit=100${filter}`);
+  }
+
+  async function fetchActiveOrders() {
+    const orders = [], seen = new Set();
+    let cursor = null;
+    do {
+      const page = await fetchOrders(`&status=in.(${[...ACTIVE_ORDER_STATUSES].join(",")})${cursor ? MAOrderRules.olderOrdersFilter(cursor) : ""}`);
+      if (!Array.isArray(page) || page.length > 100) throw new APIError(502);
+      for (const order of page) {
+        if (!MAOrderRules.UUID.test(order?.id) || seen.has(order.id)) throw new APIError(502);
+        seen.add(order.id);
+        if (ACTIVE_ORDER_STATUSES.has(order.status)) orders.push(order);
+      }
+      if (page.length < 100) return orders;
+      cursor = MAOrderRules.orderCursor(page.at(-1));
+    } while (true);
+  }
+
+  async function fetchOrderIDs(ids) {
+    const rows = [];
+    for (let start = 0; start < ids.length; start += 100) {
+      const chunk = ids.slice(start, start + 100);
+      if (chunk.some(id => !MAOrderRules.UUID.test(id))) throw new APIError(400);
+      const page = await fetchOrders(`&id=in.(${chunk.join(",")})`);
+      if (!Array.isArray(page)) throw new APIError(502);
+      rows.push(...page.filter(order => chunk.includes(order?.id)));
+    }
+    return rows;
+  }
+
+  function knownOrders() {
+    return [...new Map([...state.historyOrders, ...state.orders].map(order => [order.id, order])).values()];
+  }
+
+  function mergeRecentHistory(orders) {
+    if (orders.length < 100) {
+      state.historyOrders = orders.filter(order => ["delivered", "cancelled"].includes(order.status));
+      state.historyCursor = null; state.historyHasMore = false;
+      return;
+    }
+    const currentIDs = new Set(orders.map(order => order.id));
+    state.historyOrders = [...orders.filter(order => ["delivered", "cancelled"].includes(order.status)),
+      ...state.historyOrders.filter(order => !currentIDs.has(order.id))];
+    if (!state.historyCursor) {
+      try { state.historyCursor = MAOrderRules.orderCursor(orders.at(-1)); state.historyHasMore = true; }
+      catch { showStatus(elements.historyStatus, "Eski siparişlerin sayfası doğrulanamadı. Daha sonra yeniden dene.", "error"); }
+    }
+  }
+
+  async function loadOlderHistory() {
+    if (!state.session || state.historyLoading || !state.historyHasMore || !state.historyCursor) return;
+    const version = state.generation, owner = state.session.user.id, cursor = state.historyCursor;
+    state.historyLoading = true; hideStatus(elements.historyStatus); renderOrders();
+    try {
+      const rows = await fetchOrders(`&status=in.(delivered,cancelled)${MAOrderRules.olderOrdersFilter(cursor)}`);
+      const page = MAOrderRules.orderHistoryPage(rows, cursor);
+      const events = await fetchActivities(page.rows.map(order => order.id));
+      if (version !== state.generation || owner !== state.session?.user?.id || cursor !== state.historyCursor) return;
+      const ids = new Set(knownOrders().map(order => order.id));
+      state.historyOrders.push(...page.rows.filter(order => !ids.has(order.id)));
+      state.activities = [...new Map([...state.activities, ...events].map(event => [event.id, event])).values()];
+      state.historyCursor = page.cursor; state.historyHasMore = page.hasMore;
+    } catch (error) {
+      if (version !== state.generation || owner !== state.session?.user?.id) return;
+      if (error instanceof APIError && [401, 403].includes(error.status)) { handleExpiredSession(); return; }
+      showStatus(elements.historyStatus, "Eski siparişler yüklenemedi. Mevcut liste korundu; tekrar deneyebilirsin.", "error");
+    } finally {
+      if (version === state.generation && owner === state.session?.user?.id) { state.historyLoading = false; renderOrders(); }
+    }
   }
 
   async function fetchSupportTickets() {
@@ -831,7 +914,7 @@
     return events;
   }
 
-  async function loadPortal({ quiet = false } = {}) {
+  async function loadPortal({ quiet = false, trackingOnly = false } = {}) {
     if (!state.session || state.loadInFlight) return;
     state.loadInFlight = true;
     const version = state.generation;
@@ -840,25 +923,39 @@
     if (!quiet) elements.loading.hidden = false;
     hideStatus(elements.portalStatus);
     try {
-      const profile = await fetchProfile();
-      const [addresses, orders, supportTickets] = await Promise.all([
-        fetchAddresses(),
-        fetchOrders(),
-        fetchSupportTickets()
-      ]);
+      const profile = trackingOnly ? state.profile : await fetchProfile();
+      let addresses = state.addresses, supportTickets = state.supportTickets, recent = null, orders;
+      if (trackingOnly) {
+        const active = await fetchActiveOrders(), activeIDs = new Set(active.map(order => order.id));
+        const endedIDs = state.orders.filter(order => ACTIVE_ORDER_STATUSES.has(order.status) && !activeIDs.has(order.id)).map(order => order.id);
+        const ended = await fetchOrderIDs(endedIDs);
+        orders = [...active, ...ended];
+      } else {
+        [addresses, recent, supportTickets] = await Promise.all([fetchAddresses(), fetchOrders(), fetchSupportTickets()]);
+        if (!Array.isArray(recent)) throw new APIError(502);
+        const active = recent.length === 100 ? await fetchActiveOrders() : [];
+        orders = [...new Map([...recent, ...active].map(order => [order.id, order])).values()];
+        const present = new Set(orders.map(order => order.id));
+        const endedIDs = state.orders.filter(order => ACTIVE_ORDER_STATUSES.has(order.status) && !present.has(order.id)).map(order => order.id);
+        orders.push(...await fetchOrderIDs(endedIDs));
+      }
+      const activities = await fetchActivities(orders.map(order => order.id));
       if (version !== state.generation) return;
       state.profile = profile;
       state.addresses = addresses || [];
       const previousActive = new Set(state.orders.filter((order) => ACTIVE_ORDER_STATUSES.has(order.status)).map((order) => order.id));
       const completed = (orders || []).filter(order => order.status === "delivered" && previousActive.has(order.id));
-      state.orders = orders || [];
+      const updatedIDs = new Set(orders.map(order => order.id));
+      state.orders = trackingOnly ? [...orders, ...state.orders.filter(order => !ACTIVE_ORDER_STATUSES.has(order.status) && !updatedIDs.has(order.id))] : orders;
+      if (recent) mergeRecentHistory(recent);
+      const history = new Map([...state.historyOrders, ...orders.filter(order => ["delivered", "cancelled"].includes(order.status))].map(order => [order.id, order]));
+      for (const order of state.orders) if (ACTIVE_ORDER_STATUSES.has(order.status)) history.delete(order.id);
+      state.historyOrders = [...history.values()].sort(MAOrderRules.newestOrderFirst);
       for (const order of state.orders) if (!ACTIVE_ORDER_STATUSES.has(order.status)) {
         state.collapsedActiveOrders.delete(order.id); state.openLocationMaps.delete(order.id);
       }
       state.supportTickets = supportTickets || [];
-      const activities = await fetchActivities(state.orders.map((order) => order.id));
-      if (version !== state.generation) return;
-      state.activities = activities;
+      state.activities = [...state.activities.filter(event => !updatedIDs.has(event.order_id)), ...activities];
       renderAll();
       if (completed.length) showStatus(elements.portalStatus, `${completed.map(order => `Sipariş ${orderCode(order)}`).join(", ")} teslim edildi. Detayları Profil > Geçmiş siparişlerim bölümünde.`, "success");
     } catch (error) {
@@ -1149,7 +1246,18 @@
     refresh: () => loadPortal({ quiet: true }),
     showOrder: async (id) => {
       await loadPortal({ quiet: true });
-      const order = state.orders.find(order => order.id === id);
+      const version = state.generation;
+      let order = knownOrders().find(order => order.id === id);
+      if (!order && MAOrderRules.UUID.test(id)) {
+        const rows = await fetchOrderIDs([id]);
+        if (version !== state.generation) return;
+        order = rows[0];
+        if (order) {
+          if (ACTIVE_ORDER_STATUSES.has(order.status)) state.orders.push(order);
+          else state.historyOrders.push(order);
+          renderOrders();
+        }
+      }
       const active = !order || ACTIVE_ORDER_STATUSES.has(order.status);
       openView(active ? "orders" : "history");
       const container = active ? elements.ordersList : elements.historyList;
@@ -1158,6 +1266,7 @@
     }
   });
   document.getElementById("profile-edit").addEventListener("click", () => orderFlow.editProfile());
+  elements.historyMore.addEventListener("click", () => { void loadOlderHistory(); });
   document.getElementById("profile-photo").addEventListener("click", () => orderFlow.editProfile());
   function syncOrderFlow() {
     orderFlow?.sync({ owner: state.session?.user?.id || null, profile: state.profile, addresses: state.addresses, runtime: state.runtime, orders: state.orders });
@@ -1211,6 +1320,9 @@
     } catch { showStatus(elements.authStatus, "Kayıt tamamlanamadı. Bilgilerini kontrol edip yeniden dene.", "error"); }
     finally { submit.disabled = false; }
   });
+  setInterval(() => {
+    if (state.session && !document.hidden && !document.getElementById("view-orders").hidden) void loadPortal({ quiet: true, trackingOnly: true });
+  }, 2000);
   setInterval(() => { if (state.session && !document.hidden) void loadPortal({ quiet: true }); }, 15000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && state.session) {

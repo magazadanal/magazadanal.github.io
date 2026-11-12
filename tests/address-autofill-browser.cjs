@@ -35,6 +35,9 @@ async function main() {
         let data;
         if (url.pathname.endsWith('get_public_runtime_status')) data = [{customer_web_account_enabled: true, customer_ordering_enabled: true}];
         else if (url.pathname === '/rest/v1/profiles') data = [{id: owner, role: 'customer', full_name: 'Synthetic Customer', phone: '+905300000000', is_active: true}];
+        else if (url.pathname === '/rest/v1/customer_profile_photos') {
+          assert.equal(request.method(), 'GET'); assert.equal(url.searchParams.get('user_id'), `eq.${owner}`); data = [];
+        }
         else if (url.pathname === '/functions/v1/web-address-lookup') {
           const point = request.postDataJSON();
           assert.deepEqual(Object.keys(point).sort(), ['latitude', 'longitude']); assert.ok(R.point(point.latitude, point.longitude));
