@@ -169,6 +169,32 @@ geçmez; bu kontrol kullanıcı döndüğünde yapılmalıdır. Web geçmişinin
 SITE_TEST_URL=http://127.0.0.1:8894 node tests/photo-parity-browser.cjs
 ```
 
+## 12 Kasım: Eksik Sayfalar İçin 503 Düzeltmesi
+
+Canlı kontrolde `/supabase/config.toml` ve rastgele bulunmayan bir adres,
+aynı GitHub "Unicorn!" 503 yanıtını verdi. Bu bir yapılandırma dosyası
+ifşası değildi; ana sayfa ve müşteri sayfaları çalışıyordu. Site kökünde
+özel bir `404.html` bulunmadığı için sağlayıcının ortak hata sayfası
+kullanılıyordu. Yeni kök hata sayfası GitHub Pages ve Cloudflare Pages'in
+yerleşik 404 davranışını kullanır; yönlendirme veya sahte 200 yanıtı eklemez.
+
+Hata sayfası yalnız mevcut logo, yerel CSS ve tema betiğini yükler; hesap
+betiği/API çağrısı, form veya URL yansıtması içermez. Bağlantıları köke
+görelidir; derin bir hatalı adreste de varlıklar ve kurtarma bağlantıları
+çalışır. Oturum ve sepet depolaması değiştirilmez. Yerel önizleme aynı
+sayfayı HTTP 404 ve HEAD için boş gövdeyle döndürür; gizli dosya ve kaynak
+betiği kısıtlamaları korunur.
+
+Yerel doğrulama: 90 Node testi ve 13 eksik-adres/ekran-tema senaryosu.
+Canlı sonucun ayrıca kontrol edilmesi gerekir; yalnız kaynak dosyasının
+eklenmesi, sağlayıcıdaki dağıtım tamamlanmadan 503'ün düzeldiğini kanıtlamaz.
+RLS, giriş/bot koruması, yönetici cihaz güvenliği, DNS, TLS ve ödeme
+altyapısında değişiklik yoktur.
+
+```sh
+SITE_TEST_URL=http://127.0.0.1:8895 node tests/not-found-browser.cjs
+```
+
 ## Kaynaklar ve Varlıklar
 
 - [QNB site ön koşulları](https://www.qnb.com.tr/dijitalkopru/akademi/sanal-pos-nedir-10905)
