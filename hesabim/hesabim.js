@@ -573,7 +573,7 @@
             try {
               const details = await loadDetails(); if (!current() || !selected.checked) return;
               verified = details; orderFlow.bankDetails(bank, details.code);
-              bank.append(element("p", "", `Ödeme tutarı: ${formatMoney(details.amount)}`)); showStatus(feedback, ""); command.disabled = false;
+              bank.append(element("p", "", `Ödeme tutarı: ${formatMoney(details.amount)}`)); hideStatus(feedback); command.disabled = false;
             } catch { if (current()) { selected.checked = false; showStatus(feedback, "Ek ödeme bilgileri doğrulanamadı. Tekrar Havale / EFT seçerek deneyebilirsin.", "error"); } }
           });
           command.addEventListener("click", async () => {

@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const {chromium} = require('playwright');
 const base = process.env.SITE_TEST_URL || 'http://127.0.0.1:8892';
 assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
@@ -7,6 +9,8 @@ const orderID = '20000000-0000-4000-8000-000000000001';
 const event = {id:'30000000-0000-4000-8000-000000000001',order_id:orderID,action:'extra_payment_requested',current_assignment:true,amount:100.5,created_at:'2026-11-12T12:00:01Z'};
 const payment = {id:'40000000-0000-4000-8000-000000000001',order_id:orderID,purpose:'adjustment',direction:'charge',method:'bank_transfer',status:'pending',amount:100.5,transfer_code:'EK-0123456789AB',created_at:'2026-11-12T12:00:00Z'};
 async function main() {
+  const output = process.env.SITE_SCREENSHOT_DIR || '/private/tmp/ma-platform-flow-20261112';
+  await fs.mkdir(output,{recursive:true});
   const browser = await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
   try {
     for (const scenario of ['desktop','mobile','mismatch','stale','invalid-code','unavailable','changed-before-report']) {
@@ -47,7 +51,12 @@ async function main() {
       await page.getByRole('radio',{name:'Havale / EFT',exact:true}).check();
       if (['desktop','mobile','changed-before-report'].includes(scenario)) {
         await page.getByText(payment.transfer_code,{exact:true}).waitFor(); assert.equal(await command.isEnabled(),true);
+        assert.equal(await page.locator('.app-disclosure .status:not([hidden])').count(),0,'No empty status strip after successful lookup');
         assert.ok((await page.locator('body').innerText()).includes('100,50'));
+        if (['desktop','mobile'].includes(scenario)) {
+          assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'No horizontal overflow');
+          await page.screenshot({path:path.join(output,`extra-payment-${scenario}.png`),fullPage:true});
+        }
         await command.click();
         if (scenario==='changed-before-report') {await page.getByText('Ek ödeme bildirimi doğrulanamadı. Güncel bilgileri yeniden kontrol et.',{exact:true}).waitFor();assert.equal(responses.length,0);}
         else {await page.waitForFunction(()=>!document.body.textContent.includes('Havale Yaptım, Bildir'));assert.equal(responses.length,1);assert.ok(reads>=2,'Payment is revalidated before reporting');}
