@@ -673,7 +673,7 @@
       for (const express of [true, false]) {
         const label = el("label", undefined, "choice-row"); const input = el("input"); input.type = "radio"; input.name = "delivery"; input.checked = draft.express === express;
         input.addEventListener("change", () => { draft.express = express; mutate(); cartPage(); });
-        const text = el("div"); text.append(el("strong", express ? "1–3 saatte teslim" : "Gün içinde teslim"), el("span", money(R.totals(draft.items, express, draft.promotion?.percent || 0).service)));
+        const text = el("div"); text.append(el("strong", R.deliveryLabel(express)), el("span", money(R.totals(draft.items, express, draft.promotion?.percent || 0).service)));
         label.append(input, text); delivery.append(label);
       }
       cartPanel.append(delivery);
@@ -889,7 +889,7 @@
     }
     async function init() {
       try {
-        const [c, l, p, settings] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v8.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" }), fetch("/assets/checkout-reference.json", { credentials: "omit", cache: "no-store" })]);
+        const [c, l, p, settings] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v9.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" }), fetch("/assets/checkout-reference.json", { credentials: "omit", cache: "no-store" })]);
         if (!c.ok || !l.ok || !p.ok || !settings.ok) throw Error();
         referenceEnabled = (await settings.json()).enabled === true;
         stores = (await c.json()).stores; legal = await l.json(); countries = (await p.json()).countries;

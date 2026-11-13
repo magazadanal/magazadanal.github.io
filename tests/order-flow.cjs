@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const legal = require("../assets/legal-v8.json");
+const legal = require("../assets/legal-v9.json");
 const base = process.env.SITE_TEST_URL || "http://127.0.0.1:8766";
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
 const output = process.env.SITE_SCREENSHOT_DIR || "/private/tmp/ma-web-order-20261105";
@@ -102,9 +102,17 @@ async function main() {
       await page.getByRole("button", { name: "Uygula", exact: true }).click();
       await page.getByRole("button", { name: "Kaldır", exact: true }).waitFor();
       assert.equal(await page.locator('.choice-row input:disabled').count(), 1);
+      const deliveryOptions = page.locator('fieldset.app-options').first();
+      assert.ok((await deliveryOptions.innerText()).includes('1-3 saatte teslim (Tahmini)'));
+      assert.ok((await deliveryOptions.innerText()).includes('Gün içinde teslim'));
+      assert.ok(!(await deliveryOptions.innerText()).includes('Tahmini gün'));
+      await deliveryOptions.screenshot({path:path.join(output,`delivery-options-${width}-${theme}.png`)});
       await page.getByRole("button", { name: "Öde ve onayla", exact: true }).click();
       await page.getByText("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.", { exact: true }).waitFor();
       await page.getByRole("button", { name: /Ön Bilgilendirme, Mesafeli Sözleşme ve İade Koşulları/ }).click();
+      const legalText = await page.locator('.app-dialog').innerText();
+      for (const text of ['Mağaza şubesi:','Beden / boyut: M','Renk: Siyah','Ürün linki: https://example.com/product',
+        'Kanuni azami süre (teslimat seçeneği değildir):']) assert.ok(legalText.includes(text),text);
       await page.getByRole("button", { name: "Okudum ve kabul ediyorum", exact: true }).click();
       await page.locator('.legal-approval').nth(1).click();
       await page.getByRole("button", { name: "Okudum ve kabul ediyorum", exact: true }).click();
@@ -129,7 +137,7 @@ async function main() {
       assert.deepEqual(attempts[0], attempts[1], "Retries use identical immutable payload and request ID across reload");
       assert.equal(attempts[1].legal_acceptances.length, 4);
       for (const doc of attempts[1].legal_acceptances) {
-        assert.equal(doc.document_version, '2026-11-08-model-b-8');
+        assert.equal(doc.document_version, '2026-11-13-model-b-9');
         assert.ok(doc.content.includes(legal.service_data_notice));
       }
       for (const doc of legal.profile) assert.ok(acks.some(ack => ack.document_type === doc.p_document_type && ack.document_version === doc.p_document_version && ack.document_hash === doc.p_document_hash));
