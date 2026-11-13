@@ -37,12 +37,16 @@ async function main(){
       await page.goto(base+'/');await menu('#home-sidebar');assert.ok(await page.locator('#home-account-link').isVisible());
       await page.screenshot({path:path.join(output,`guest-home-${width}-${height}-${theme}.png`)});
       await page.locator('#home-sidebar [href="/hesabim/?view=shop"]').click();
-      await page.locator('#login-button:not(:disabled)').waitFor();await menu('#account-sidebar');
-      assert.ok(await page.locator('#auth-view').isVisible());assert.ok(await page.locator('#portal-view').isHidden());
+      await page.locator('#login-button:not(:disabled)').waitFor({state:'attached'});await menu('#account-sidebar');
+      assert.ok(await page.locator('#auth-view').isHidden());assert.ok(await page.locator('[data-panel="shop"]').isVisible());
       for(const view of ['shop','cart','orders','profile']){
         const button=page.locator(`#account-sidebar [data-view="${view}"]`);await button.scrollIntoViewIfNeeded();await button.click();
-        assert.ok(await page.locator('#auth-view').isVisible());assert.ok(await page.locator('#portal-view').isHidden());
-        assert.equal(await page.locator('#auth-status').innerText(),'Devam etmek için hesabına giriş yap.');
+        if(['shop','cart'].includes(view)){
+          assert.ok(await page.locator('#auth-view').isHidden());assert.ok(await page.locator(`[data-panel="${view}"]`).isVisible());
+        }else{
+          assert.ok(await page.locator('#auth-view').isVisible());assert.ok(await page.locator('#portal-view').isHidden());
+          assert.equal(await page.locator('#auth-status').innerText(),'Devam etmek için hesabına giriş yap.');
+        }
         assert.equal(await page.getByRole('button',{name:'Öde ve onayla',exact:true}).count(),0);
       }
       await page.locator('#login-email').fill('not-a-real-account@example.invalid');await page.locator('#login-button').click();
@@ -50,7 +54,8 @@ async function main(){
       await page.screenshot({path:path.join(output,`guest-login-${width}-${height}-${theme}.png`)});
       await page.locator('#signup-toggle').click();await page.locator('#signup-name').fill('Sentetik');
       await page.locator('#account-sidebar [data-view="shop"]').click();assert.equal(await page.locator('#signup-name').inputValue(),'Sentetik');
-      assert.ok(await page.locator('#signup-form').isVisible());await menu('#account-sidebar');
+      assert.ok(await page.locator('#signup-form').isHidden());
+      await page.locator('#account-sidebar [data-view="profile"]').click();assert.ok(await page.locator('#signup-form').isVisible());await menu('#account-sidebar');
       await page.locator('#account-sidebar [data-view="home"]').click();await page.waitForURL(base+'/');await menu('#home-sidebar');
       assert.equal(await page.evaluate(()=>sessionStorage.getItem('magazadanal.web.session.v1')),null);
       assert.deepEqual(errors,[]);results.push({width,height,theme,passed:true,privateRequests:0});await context.close();
@@ -69,9 +74,10 @@ async function main(){
         assert.equal(mode,'expired');assert.equal(url.pathname,'/auth/v1/token');
         return route.fulfill({status:401,contentType:'application/json',body:'{}'});
       });
-      await page.goto(base+'/hesabim/?view=shop');await page.locator('#login-button:not(:disabled)').waitFor();
-      assert.ok(await page.locator('#account-sidebar').isVisible());assert.ok(await page.locator('#portal-view').isHidden());
-      await page.locator('#account-sidebar [data-view="cart"]').click();assert.ok(await page.locator('#auth-view').isVisible());
+      await page.goto(base+'/hesabim/?view=shop');await page.locator('#login-button:not(:disabled)').waitFor({state:'attached'});
+      assert.ok(await page.locator('#account-sidebar').isVisible());
+      await page.locator('#account-sidebar [data-view="cart"]').click();assert.ok(await page.locator('[data-panel="cart"]').isVisible());
+      await page.locator('#account-sidebar [data-view="profile"]').click();assert.ok(await page.locator('#auth-view').isVisible());
       assert.ok(calls.every(p=>p.endsWith('get_public_runtime_status')||p==='/auth/v1/token'));
       storageResults.push({mode,passed:true,privateRequests:0});await context.close();
     }

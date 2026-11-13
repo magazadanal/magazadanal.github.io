@@ -307,6 +307,7 @@
     document.documentElement.dataset.sessionState = isVisible ? "signed-in" : "signed-out";
     elements.authView.hidden = isVisible;
     elements.portalView.hidden = !isVisible;
+    if (!isVisible) orderFlow?.show("auth");
     if (!isVisible) document.querySelectorAll("#account-sidebar [data-view]").forEach(button => {
       button.classList.remove("is-active"); button.setAttribute("aria-current", "false");
     });
@@ -1062,12 +1063,17 @@
 
   function openView(viewName) {
     if (!["home", "shop", "cart", "orders", "history", "profile", "addresses", "support"].includes(viewName)) return;
-    if (!state.session) {
+    if (!state.session && !["shop", "cart"].includes(viewName)) {
       if (viewName === "home") { window.location.assign("/"); return; }
       setPortalVisible(false);
       showStatus(elements.authStatus, "Devam etmek için hesabına giriş yap.");
       if (!elements.loginForm.hidden) elements.email.focus();
       return;
+    }
+    if (!state.session) {
+      document.documentElement.dataset.sessionState = "guest";
+      elements.authView.hidden = true;
+      elements.portalView.hidden = false;
     }
     if (state.session) try { sessionStorage.setItem(`magazadanal.web.view.v1.${state.session.user.id}`, viewName); } catch { /* Memory-only navigation. */ }
     hideStatus(document.getElementById("order-status"));
@@ -1106,7 +1112,7 @@
       elements.password.type = "password";
       setPortalVisible(true);
       await loadPortal();
-      restoreView(true);
+      await restoreView(true);
       void loadHome();
     } catch (error) {
       saveSession(null);
@@ -1234,6 +1240,8 @@
 
     if (!stored) {
       setPortalVisible(false);
+      const publicView = new URLSearchParams(location.search).get("view");
+      if (["shop", "cart"].includes(publicView)) openView(publicView);
       return;
     }
 
@@ -1243,11 +1251,11 @@
       await loadPortal();
       if (!state.session) return;
       setPortalVisible(true);
-      restoreView();
+      await restoreView();
       void loadHome();
     } catch (error) {
       if ([400, 401, 403].includes(error.status)) handleExpiredSession();
-      else { setPortalVisible(true); restoreView(); showStatus(elements.portalStatus, "Bağlantı kurulamadı; oturum ve taslak korunuyor. Yeniden bağlandığında bilgiler güncellenecek.", "error"); scheduleRefresh(); }
+      else { setPortalVisible(true); await restoreView(); showStatus(elements.portalStatus, "Bağlantı kurulamadı; oturum ve taslak korunuyor. Yeniden bağlandığında bilgiler güncellenecek.", "error"); scheduleRefresh(); }
     }
   }
 
@@ -1256,7 +1264,11 @@
     error: (text) => showStatus(elements.portalStatus, text, "error"),
     openView,
     email: () => state.session?.user?.email || "",
-    requireLogin: () => { setPortalVisible(false); elements.email.focus(); },
+    requireLogin: () => {
+      setPortalVisible(false);
+      showStatus(elements.authStatus, "Sepetin korunuyor. Siparişini tamamlamak için giriş yap.");
+      if (!elements.loginForm.hidden) elements.email.focus();
+    },
     checkRuntime: enforceRuntimeStatus,
     refresh: () => loadPortal({ quiet: true }),
     showOrder: async (id) => {
@@ -1286,8 +1298,9 @@
   function syncOrderFlow() {
     orderFlow?.sync({ owner: state.session?.user?.id || null, profile: state.profile, addresses: state.addresses, runtime: state.runtime, orders: state.orders });
   }
-  function restoreView(freshLogin = false) {
+  async function restoreView(freshLogin = false) {
     if (!state.session) return;
+    const generation = state.generation;
     let saved = null;
     try {
       saved = sessionStorage.getItem(`magazadanal.web.view.v1.${state.session.user.id}`);
@@ -1305,7 +1318,9 @@
       }
       elements.supportCharacterCount.textContent = `${elements.supportMessage.value.length} / 2000`;
     } catch { /* Restore only available tab-local state. */ }
-    const target = freshLogin ? "shop" : new URLSearchParams(location.search).get("view") || saved || "shop";
+    const guestCart = await orderFlow.resumeGuestCart();
+    if (generation !== state.generation || !state.session) return;
+    const target = guestCart ? "cart" : freshLogin ? "shop" : new URLSearchParams(location.search).get("view") || saved || "shop";
     openView(target);
   }
   document.getElementById("signup-toggle").addEventListener("click", () => {
@@ -1330,7 +1345,7 @@
       if (session) {
         saveSession(session);
         if (await api("/rest/v1/rpc/ensure_customer_profile", { method: "POST", body: { p_full_name: name, p_phone: phone } }) !== true) throw new APIError(403);
-        setPortalVisible(true); await loadPortal(); openView("shop");
+        setPortalVisible(true); await loadPortal(); await restoreView(true);
       } else showStatus(elements.authStatus, "E-postana gelen doğrulama bağlantısını aç, ardından giriş yap.", "success");
     } catch { showStatus(elements.authStatus, "Kayıt tamamlanamadı. Bilgilerini kontrol edip yeniden dene.", "error"); }
     finally { submit.disabled = false; }

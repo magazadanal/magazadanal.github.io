@@ -82,7 +82,7 @@
   const searchCache = new Map(); let nextSearchAt = 0;
   function choosePoint(initial, onChoose, storeName = "", searchPlaces = null) {
     const view = modal("Konum seç");
-    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : " Bu konumu kullan seçildiğinde adres alanlarını doldurmak için yalnız işaretlediğin koordinatlar sunucumuz üzerinden Photon (komoot) hizmetine iletilir; ad, telefon ve hesap bilgilerin gönderilmez.") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
+    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? (searchPlaces ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : " Teslim alınacak şubeyi haritadan seçebilirsin.") : " Bu konumu kullan seçildiğinde adres alanlarını doldurmak için yalnız işaretlediğin koordinatlar sunucumuz üzerinden Photon (komoot) hizmetine iletilir; ad, telefon ve hesap bilgilerin gönderilmez.") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
     function openMap() {
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
       let selected = R.point(initial?.latitude, initial?.longitude) ? [initial.latitude, initial.longitude] : null;
@@ -102,7 +102,7 @@
       if (selected) set(...selected, initial?.name || "");
       map.on("click", (e) => set(e.latlng.lat, e.latlng.lng));
       const searchForm = el("form", undefined, "map-search-form"); searchForm.noValidate = true;
-      searchForm.hidden = !storeName;
+      searchForm.hidden = !storeName || !searchPlaces;
       const query = field(searchForm, "Mağaza veya yer ara", "map_search", storeName, "text", { max: 120 });
       const find = el("button", "Ara", "button compact-button"); find.type = "submit"; searchForm.append(find);
       const results = el("div", undefined, "map-search-results"); results.setAttribute("role", "status");
@@ -133,7 +133,7 @@
         finally { searching = false; find.disabled = false; }
       }
       searchForm.addEventListener("submit", event => { event.preventDefault(); void search(); });
-      if (storeName && !selected) void search();
+      if (storeName && searchPlaces && !selected) void search();
       const locate = button("Konumum", () => {
         if (!navigator.geolocation) return status(location, "Bu tarayıcı konumu desteklemiyor.", true);
         navigator.geolocation.getCurrentPosition((p) => {
@@ -158,6 +158,8 @@
     const profilePhotoButton = document.getElementById("profile-photo");
     const profilePhotoStatus = document.getElementById("profile-photo-status");
     let referenceEnabled = false, referenceLoading = false, referenceError = "", referenceAttempt = null, draftLease = null;
+    const guestKey = "magazadanal.web.guest-cart.v1";
+    let guestOffer = null, guestDismissed = false, guestMemory = null;
     const productPanel = document.getElementById("order-flow");
     const cartPanel = document.getElementById("cart-flow");
     const notice = document.getElementById("order-status");
@@ -194,7 +196,7 @@
         details.append(line);
       } parent.append(details);
     }
-    const key = () => `magazadanal.web.draft.v1.${owner}`;
+    const key = () => owner ? `magazadanal.web.draft.v1.${owner}` : guestKey;
     const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0);
     const rpc = (name, body = {}) => host.api(`/rest/v1/rpc/${name}`, { method: "POST", body });
     function renderProfilePhoto() {
@@ -226,10 +228,42 @@
       try { await operation; } finally { if (profilePhotoLoad === operation) profilePhotoLoad = null; }
     }
     const allowed = () => owner && profile?.is_active && profile.role === "customer" && runtime?.customer_ordering_enabled === true && runtime?.maintenance_enabled !== true;
+    function guestItems(items) {
+      if (!Array.isArray(items) || items.length > 30) throw Error("Misafir sepetini kontrol et.");
+      const fields = ["client_item_id", "store", "branch", "product_name", "size", "color", "estimated_price", "product_link", "order_note", "image_data_base64", "store_latitude", "store_longitude"];
+      const cleaned = items.map(item => R.validateItem(Object.fromEntries(fields.filter(k => item?.[k] !== undefined).map(k => [k, item[k]])), stores));
+      if (new Set(cleaned.map(item => item.client_item_id)).size !== cleaned.length) throw Error("Misafir sepetindeki ürünleri kontrol et.");
+      return cleaned;
+    }
+    function readGuest() {
+      try {
+        const text = guestMemory ? JSON.stringify(guestMemory) : sessionStorage.getItem(guestKey);
+        if (!text || text.length > 15000000) return null;
+        const row = JSON.parse(text);
+        if (row?.owner !== null || !Number.isFinite(row.updated) || Date.now() - row.updated > 86400000 || row.updated > Date.now() + 60000 || row.frozen) return null;
+        return { ...row, draft: { ...R.newDraft(), ...row.draft, items: guestItems(row.draft?.items), address: {}, buyer: undefined, promotion: null, checkoutReference: undefined } };
+      } catch { return null; }
+    }
+    function importGuest() {
+      if (!owner || !profile?.is_active || profile.role !== "customer" || !guestOffer || frozen || busy) return;
+      const previous = R.clone(draft);
+      try {
+        const items = guestItems(guestOffer.draft.items);
+        if (draft.items.length + items.length > 30) throw Error("Birleşen sepette en fazla 30 ürün olabilir. Mevcut sepetini düzenle.");
+        draft.items.push(...items.map(item => ({ ...item, client_item_id: crypto.randomUUID(), alternative_size: "İstemiyorum", alternative_color: "İstemiyorum" })));
+        draft.guestImportID = guestOffer.draft.requestID;
+        accepted = null; serviceAccepted = false; checkout = false; stage = editing ? "product" : "stores";
+        if (!save()) { draft = previous; return; }
+        guestOffer = null; guestMemory = null;
+        try { sessionStorage.removeItem(guestKey); } catch { /* Import remains visible in this tab. */ }
+        updateCartCount(); cartPage();
+      } catch (error) { draft = previous; message(error.message); }
+    }
     function save() {
-      if (!owner) return;
       const storedDraft = frozen ? { requestID: draft.requestID, createdAt: draft.createdAt, items: [], address: {}, express: draft.express, promotion: null } : draft;
-      try { sessionStorage.setItem(key(), JSON.stringify({ owner, updated: Date.now(), draft: storedDraft, frozen, stage, checkout })); return true; }
+      const snapshot = { owner, updated: Date.now(), draft: storedDraft, frozen, stage, checkout };
+      if (!owner) guestMemory = R.clone(snapshot);
+      try { sessionStorage.setItem(key(), JSON.stringify(snapshot)); return true; }
       catch { status(notice, "Taslak güvenli biçimde kaydedilemedi. Fotoğraf sayısını/boyutunu azalt veya başka bir tarayıcı kullan. Sipariş henüz gönderilmedi.", true); return false; }
     }
     function mutate() {
@@ -470,7 +504,7 @@
           if (version !== epoch || editing !== target || busy || frozen) return;
           target.store_latitude = p.latitude; target.store_longitude = p.longitude; target.branch = p.name;
           inputs.branch.value = target.branch; mutate(); locationLabel(); message("");
-        }, storeName, query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } }));
+        }, storeName, owner ? query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } }) : null);
       });
       const locationLabel = () => {
         const selected = R.point(editing.store_latitude, editing.store_longitude);
@@ -490,7 +524,6 @@
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         try {
-          if (!owner) return host.requireLogin();
           if (!editing.product_name) editing.product_name = R.productName(draft.items, editing.store);
           R.validateItem(editing, stores);
           if (!draft.items.some((i) => i.client_item_id === editing.client_item_id) && draft.items.length >= 30) throw Error("En fazla 30 ürün ekleyebilirsin.");
@@ -559,6 +592,17 @@
     function cartPage() {
       showBack();
       formBase(cartPanel, checkout ? "Teslimat ve ödeme" : "Sepetim");
+      if (owner && guestOffer && !guestDismissed) {
+        const offer = el("div", undefined, "guest-cart-offer");
+        offer.append(el("p", frozen ? "Misafir sepetin korunuyor. Önce mevcut sipariş talebini kontrol et; yeni sepete geçtiğinde ürünlerini ekleyebilirsin." : "Hesabındaki mevcut sepet korundu. Misafir olarak eklediğin ürünler ayrı tutuluyor."));
+        if (!frozen) offer.append(button("Misafir ürünlerini sepete ekle", () => {
+          const view = modal("Sepetleri birleştir?");
+          view.body.append(el("p", `Mevcut ${draft.items.length} ürüne misafir sepetindeki ${guestOffer.draft.items.length} ürün eklenecek.`));
+          view.footer.append(button("Vazgeç", () => view.dialog.close()), button("Ürünleri ekle", () => { view.dialog.close(); importGuest(); }, "button primary-button"));
+        }));
+        offer.append(button("Mevcut sepetle devam et", () => { guestDismissed = true; cartPage(); }, "text-button"));
+        cartPanel.append(offer);
+      }
       if (!draft.items.length && !frozen) {
         cartPanel.append(el("p", "Sepetin boş.", "empty-state"), button("Ürün ekle", () => host.openView("shop"), "button primary-button")); return;
       }
@@ -581,6 +625,14 @@
         row.append(thumbnail, detail, commands); list.append(row);
       });
       cartPanel.append(list, button("Başka ürün / mağaza ekle", () => { stage = "stores"; host.openView("shop"); }));
+      if (!owner) {
+        const totals = t(), summary = el("dl", undefined, "price-summary");
+        for (const [label, value] of [["Tahmini ürün toplamı", totals.products]]) {
+          const line = el("div"); line.append(el("dt", label), el("dd", money(value))); summary.append(line);
+        }
+        cartPanel.append(summary, button("Giriş yap ve siparişi tamamla", () => { save(); host.requireLogin(); }, "button primary-button"));
+        return;
+      }
       cartPanel.append(el("h3", "Teslimat adresi"));
       if (addresses.length) {
         const select = field(cartPanel, "Kayıtlı adreslerim", "saved_address", draft.addressID || "", "select", { values: [{ label: "Farklı adres gir", value: "" }, ...addresses.map((a) => ({ value: a.id, label: a.title }))] });
@@ -829,7 +881,12 @@
         const [c, l, p, settings] = await Promise.all([fetch("/assets/order-catalog.json", { credentials: "omit" }), fetch("/assets/legal-v8.json", { credentials: "omit" }), fetch("/assets/phone-countries.json", { credentials: "omit" }), fetch("/assets/checkout-reference.json", { credentials: "omit", cache: "no-store" })]);
         if (!c.ok || !l.ok || !p.ok || !settings.ok) throw Error();
         referenceEnabled = (await settings.json()).enabled === true;
-        stores = (await c.json()).stores; legal = await l.json(); countries = (await p.json()).countries; loaded = true; render();
+        stores = (await c.json()).stores; legal = await l.json(); countries = (await p.json()).countries;
+        if (!owner) {
+          const guest = readGuest();
+          if (guest) { draft = guest.draft; editing = draft.editing || null; stage = editing && guest.stage === "product" ? "product" : "stores"; }
+        }
+        loaded = true; render();
       } catch { productPanel.replaceChildren(el("p", "Sipariş içeriği yüklenemedi. Sayfayı yeniden aç.", "status status-error")); }
     }
     function render() {
@@ -847,6 +904,10 @@
           epoch++; document.querySelectorAll(".app-dialog").forEach((n) => n.close());
           profilePhoto = ""; profilePhotoLoad = null; renderProfilePhoto(); profilePhotoStatus.hidden = true;
           owner = data.owner; draft = R.newDraft(); frozen = null; accepted = null; serviceAccepted = false; stage = "stores"; editing = null; checkout = false;
+          if (!owner) {
+            const guest = readGuest();
+            if (guest) { draft = guest.draft; editing = draft.editing || null; stage = editing && guest.stage === "product" ? "product" : "stores"; }
+          }
           if (owner) try {
             const stored = JSON.parse(sessionStorage.getItem(key()));
             if (stored?.owner === owner && (stored.frozen || Date.now() - stored.updated < 86400000) && stored.draft?.items?.length <= 30 && JSON.stringify(stored).length < 15000000) {
@@ -864,8 +925,19 @@
         if (changed || reconciled) render(); else renderAddresses();
       },
       show(view) { currentView = view; showBack(); if (!loaded) return; if (view === "shop") { if (stage === "product" && editing) productPage(); else storePage(); } if (view === "cart") cartPage(); if (view === "profile") void loadProfilePhoto(); },
+      async resumeGuestCart() {
+        const customer = owner, version = epoch;
+        await ready;
+        if (customer !== owner || version !== epoch || !loaded || !owner || !profile?.is_active || profile.role !== "customer") return false;
+        guestOffer = readGuest(); guestDismissed = false;
+        if (!guestOffer?.draft.items.length) { guestOffer = null; return false; }
+        if (draft.guestImportID === guestOffer.draft.requestID) { guestOffer = null; return false; }
+        if (!frozen && !draft.items.length && !editing) importGuest();
+        return true;
+      },
       clear() {
         searchCache.clear();
+        guestOffer = null; guestDismissed = false;
         if (owner) try { sessionStorage.removeItem(key()); } catch { /* Memory-only browser. */ }
         this.sync({ owner: null, profile: null, addresses: [], runtime: null });
       },
