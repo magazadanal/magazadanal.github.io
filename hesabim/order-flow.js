@@ -563,16 +563,20 @@
         try {
           const data = await host.api("/functions/v1/web-address-lookup", {method: "POST", body: {latitude: p.latitude, longitude: p.longitude}});
           if (!current()) return;
+          const mappedFields = [["district", "İlçe"], ["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"]];
+          const valid = (key, value) => typeof value === "string" && !!value.trim() && value.length <= 200 && !/[<>\u0000-\u001f\u007f]/u.test(value)
+            && (key !== "district" || R.districts.includes(value));
           let filled = 0;
-          for (const key of ["district", "neighborhood", "address_line", "building_no"]) {
+          for (const [key] of mappedFields) {
             const value = data?.address?.[key];
-            if (typeof value !== "string" || !value.trim() || value.length > 200 || /[<>\u0000-\u001f\u007f]/u.test(value)
-              || (key === "district" && !R.districts.includes(value)) || inputs[key].value !== baseline[key]) continue;
+            if (!valid(key, value) || inputs[key].value !== baseline[key]) continue;
             inputs[key].value = value; address[key] = value; filled++;
           }
           if (filled) { address.city = "İstanbul"; onChange(); clearResolvedAddressError(); }
-          feedback.hidden = filled > 0;
-          feedback.textContent = filled ? "" : "Adres otomatik bulunamadı. Alanları elle doldurabilirsin.";
+          const missing = mappedFields.filter(([key]) => !valid(key, data?.address?.[key])).map(([, title]) => title);
+          feedback.hidden = filled > 0 && missing.length === 0;
+          feedback.textContent = !filled ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
+            : missing.length ? `Haritada bulunamayan bilgiler: ${missing.join(", ")}. Bu alanları kontrol edip tamamla.` : "";
         } catch {
           if (current()) { feedback.textContent = "Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin."; feedback.hidden = false; }
         }
@@ -585,7 +589,7 @@
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
         address[key] = input.value;
         if (["district", "neighborhood", "address_line"].includes(key)) { lookupVersion++; feedback.hidden = true; delete address.latitude; delete address.longitude; label(); }
-        onChange();
+        onChange(); clearResolvedAddressError();
       });
       label(); parent.append(locationButton, feedback);
     }
