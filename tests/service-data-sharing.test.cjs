@@ -48,12 +48,12 @@ test('public privacy contains the identical collection, sharing and proof clause
   assert.ok(!html.includes('müşteri veya diğer kuryelere açılmaz'));
 });
 
-test('v7 frozen evidence stays unchanged while the runtime selects v8', () => {
+test('v7 frozen evidence stays unchanged while notices stay v8 and orders select v9', () => {
   const hashes = {kvkk_notice:'e08008c3e0e9c7f3a140632b7e55728c89c20cb5aa0c2458bacd1945084a9734', membership:'6c7bc8ae2f27768b5f3469305a207c3e6298a925529fd2420a2a796d39234fbc', privacy:'96656adb58eadc4dec0c65d9abf8073358e7ea4701e77f1631d885177af340ea'};
   for (const row of previous.profile) assert.equal(hash(row.p_document_text), hashes[row.p_document_type]);
   for (const file of ['hesabim/order-flow.js', 'alisveris-kosullari/conditions.js']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.ok(source.includes('/assets/legal-v8.json'));
+    assert.ok(source.includes('/assets/legal-v9.json'));
     assert.ok(!source.includes('/assets/legal-v7.json'));
   }
 });

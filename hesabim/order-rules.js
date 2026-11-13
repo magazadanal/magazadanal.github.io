@@ -131,18 +131,31 @@
     const bytes = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
     return Array.from(new Uint8Array(bytes), (v) => v.toString(16).padStart(2, "0")).join("");
   }
+  function deliveryLabel(express) {
+    if (typeof express !== "boolean") throw Error("Teslimat seçeneğini seç.");
+    return express ? "Tahmini 1–3 saatte teslim" : "Tahmini gün içinde teslim";
+  }
+  function legalProductLine(item) {
+    const lines = [`${item.store} / ${item.product_name}: ${item.estimated_price} TL`,
+      `Mağaza şubesi: ${item.branch}`, `Beden / boyut: ${item.size}`, `Renk: ${item.color}`];
+    if (item.product_link) lines.push(`Ürün linki: ${item.product_link}`);
+    if (item.image_data_base64) lines.push("Ürün fotoğrafı: Sipariş kaydına eklenmiştir.");
+    if (item.order_note) lines.push(`Sipariş notu: ${item.order_note}`);
+    return lines.join("\n");
+  }
   async function documents(draft, catalog, email, stores) {
     validate(draft, stores);
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const t = totals(draft.items, draft.express, draft.promotion?.percent || 0);
+    const detailed = catalog.order.every(doc => doc.document_version === "2026-11-13-model-b-9");
     const values = {
       REQUEST_ID: referenceCode(draft, draft.checkoutReference?.owner) || draft.requestID, CREATED_AT: draft.createdAt,
       CUSTOMER_NAME: draft.buyer?.full_name || draft.address.customer_name, CUSTOMER_EMAIL: email,
       CUSTOMER_PHONE: draft.buyer?.phone || draft.address.customer_phone, DELIVERY_ADDRESS: addressSummary(draft.address),
-      PRODUCT_LINES: draft.items.map((item, i) => `${i + 1}. ${item.store} / ${item.product_name}: ${item.estimated_price} TL`).join("\n"),
+      PRODUCT_LINES: draft.items.map((item, i) => `${i + 1}. ` + (detailed ? legalProductLine(item) : `${item.store} / ${item.product_name}: ${item.estimated_price} TL`)).join("\n"),
       STORE_NAMES: [...new Set(draft.items.map((item) => item.store))].join(", "),
       PRODUCT_TOTAL: String(t.products), SERVICE_TOTAL: String(t.service), DISCOUNT: String(t.discount), GRAND_TOTAL: String(t.total),
-      DELIVERY_OPTION: draft.express ? "1-3 saatte teslim" : "Gün içinde teslim"
+      DELIVERY_OPTION: detailed ? deliveryLabel(draft.express) : draft.express ? "1-3 saatte teslim" : "Gün içinde teslim"
     };
     return Promise.all(catalog.order.map(async (doc) => {
       const content = doc.template.replace(/\{\{([A-Z_]+)\}\}/g, (_, key) => {
@@ -234,5 +247,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });
