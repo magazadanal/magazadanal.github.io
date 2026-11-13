@@ -165,6 +165,14 @@ async function main() {
       await page.locator('[data-view="profile"]').click();
       await Promise.all([page.waitForEvent("framenavigated", (frame) => frame === page.mainFrame()), page.locator("#logout-button").click()]);
       await page.locator("#auth-view").waitFor();
+      assert.ok(await page.locator("#account-sidebar").isVisible(), "Menu remains visible after logout");
+      assert.ok(await page.locator("#portal-view").isHidden(), "Private content stays hidden after logout");
+      assert.equal(await page.locator("[data-cart-count]").innerText(), "", "Public menu does not retain the previous cart count");
+      const submittedBeforeGuestNavigation = calls.filter(c => c.path.endsWith("create_customer_order_v7")).length;
+      await page.locator('#account-sidebar [data-view="shop"]').click();
+      assert.ok(await page.locator("#auth-view").isVisible());
+      assert.ok(await page.locator("#portal-view").isHidden());
+      assert.equal(calls.filter(c => c.path.endsWith("create_customer_order_v7")).length, submittedBeforeGuestNavigation);
       assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((k) => k.includes("draft.v1"))), false);
       assert.ok(calls.every((c) => !c.path.includes("admin_")));
       await context.close(); runs++;
