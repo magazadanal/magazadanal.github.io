@@ -1,10 +1,13 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const { chromium } = require("playwright");
 const base = new URL(process.env.SITE_TEST_URL || "http://127.0.0.1:8766");
 assert.ok(["127.0.0.1", "localhost"].includes(base.hostname));
 const owner = "10000000-0000-4000-8000-000000000001";
 const id = n => `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const created = "2026-11-12T12:00:00.123456+00:00";
+const documentTitles = ["Ön Bilgilendirme Formu", "Mesafeli Satış ve Hizmet Sözleşmesi", "Cayma, İptal ve İade Koşulları", "Hizmete Hemen Başlama Onayı"];
 
 async function run() {
   const browser = await chromium.launch({ headless: true,
@@ -15,6 +18,10 @@ async function run() {
       const page = await context.newPage(); page.setDefaultTimeout(12000);
       const errors = [], historyCursors = [], calls = [];
       let failures = scenario === "retry" ? 1 : 0, release = null, delivered = false;
+      const version = scenario === "pages" ? "2026-10-14-model-b-4" : scenario === "retry" ? "2026-11-08-model-b-8" : "2026-11-13-model-b-9";
+      const documents = ["pre_information", "distance_contract", "cancellation_return", "service_start"].map(type => ({
+        document_type: type, document_version: version, document_text: `Saved ${type} <img src=x onerror=alert(1)>`, document_hash: "unchanged-test-hash"
+      }));
       const orders = Array.from({ length: 250 }, (_, i) => ({ id: id(250 - i), order_no: String(250 - i).padStart(6, "0"),
         status: i === 249 ? "shopping" : "delivered", customer_total: 1360.5, selected_store_count: 1,
         created_at: created, delivery_address_snapshot: {}, order_items: [] }));
@@ -54,6 +61,10 @@ async function run() {
           }
           result = rows.slice(0, 100);
         } else if (url.pathname.endsWith("get_order_courier_position")) result = [];
+        else if (url.pathname.endsWith("get_customer_order_legal_documents")) {
+          assert.equal(request.postDataJSON().target_order_id, id(2));
+          result = documents;
+        }
         else if (url.pathname.endsWith("get_order_delivery_code")) result = [{ delivery_code: "1234" }];
         else if (url.pathname === "/auth/v1/logout") result = {};
         else if (["/rest/v1/customer_addresses", "/rest/v1/customer_profile_photos"].includes(url.pathname)
@@ -95,6 +106,19 @@ async function run() {
         await page.locator(`#history-list [data-order-id="${id(2)}"] summary`).click();
         assert.ok(await page.locator(`#history-list [data-order-id="${id(2)}"]`).innerText().then(text => text.includes("1.360,50")));
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await page.locator(`#history-list [data-order-id="${id(2)}"]`).getByRole("button", { name: "Sipariş sözleşmeleri", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "Sipariş sözleşmeleri", exact: true });
+        await dialog.waitFor();
+        assert.deepEqual(await dialog.locator("summary").allTextContents(), documentTitles);
+        await dialog.locator("summary").first().click();
+        assert.equal(await dialog.locator("pre").first().innerText(), documents[0].document_text);
+        assert.ok(await dialog.getByText(`Belge sürümü: ${version}`, { exact: true }).first().isVisible());
+        assert.equal(await dialog.locator(".app-dialog-body img, .app-dialog-body script, .app-dialog-body iframe").count(), 0, "Stored text must not become HTML");
+        if (process.env.SITE_SCREENSHOT_DIR) {
+          await fs.mkdir(process.env.SITE_SCREENSHOT_DIR, { recursive: true });
+          await page.screenshot({ path: path.join(process.env.SITE_SCREENSHOT_DIR, `saved-documents-${scenario}.png`) });
+        }
+        await dialog.getByRole("button", { name: "Kapat", exact: true }).click();
         if (scenario === "tracking") {
           const before = calls.filter(call => call.includes("status=in.") && !call.includes("delivered,cancelled")).length;
           await page.clock.fastForward(6000);
@@ -118,7 +142,7 @@ async function run() {
       assert.deepEqual(errors, []);
       await context.close();
     }
-    console.log("PASS: four history/tracking scenarios; 249 historical orders, stable microsecond cursors, retry, logout isolation, old active order and visible-only 2-second updates.");
+    console.log("PASS: four history/tracking scenarios; old/new document titles, unchanged safe document text, 249 historical orders, stable cursors, retry, logout and visible-only tracking.");
   } finally { await browser.close(); }
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

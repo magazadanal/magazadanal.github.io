@@ -960,7 +960,7 @@
         if (!rows?.length) view.body.append(el("p", "Bu sipariş için belge bulunamadı."));
         for (const row of rows || []) {
           const section = el("details", undefined, "app-disclosure");
-          section.append(el("summary", `${row.document_type} · ${row.document_version}`), el("pre", row.document_text, "legal-text")); view.body.append(section);
+          section.append(el("summary", R.orderDocumentTitle(row.document_type)), el("p", `Belge sürümü: ${row.document_version}`, "muted"), el("pre", row.document_text, "legal-text")); view.body.append(section);
         }
       },
       async editProfile() {
