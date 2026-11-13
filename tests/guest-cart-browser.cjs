@@ -15,9 +15,10 @@ async function main(){
   const browser = await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
   const results = [];
   try{
-    for(const mode of ['empty','existing','editing','expiry','pending','remove','quota','blocked','malformed','expired']){
+    for(const mode of ['empty','slow','existing','editing','expiry','pending','remove','quota','blocked','malformed','expired']){
       const context = await browser.newContext({viewport:{width:mode==='empty'?390:1280,height:900}}),page=await context.newPage(),calls=[],errors=[];
       let authenticated=false,expired=false;
+      let releaseProfile;
       page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
       await page.clock.install({time:new Date()});
       await context.route('**/*',async route=>{
@@ -34,7 +35,10 @@ async function main(){
         }else{
           assert.ok(authenticated,`No anonymous private request: ${p}`);
           if(expired)return route.fulfill({status:401,contentType:'application/json',body:'{}'});
-          if(p==='/rest/v1/profiles')data=[{id:owner,full_name:'Sentetik Müşteri',phone:'+905301234567',role:'customer',is_active:true}];
+          if(p==='/rest/v1/profiles'){
+            if(mode==='slow'&&!releaseProfile)await new Promise(resolve=>{releaseProfile=resolve;});
+            data=[{id:owner,full_name:'Sentetik Müşteri',phone:'+905301234567',role:'customer',is_active:true}];
+          }
           else if(['/rest/v1/customer_addresses','/rest/v1/orders','/rest/v1/customer_profile_photos','/rest/v1/rpc/list_support_tickets_v3','/rest/v1/rpc/list_order_activity'].includes(p))data=[];
           else throw Error(`Unexpected private write or lookup: ${p}`);
         }
@@ -83,6 +87,14 @@ async function main(){
         await page.screenshot({path:path.join(output,`guest-cart-${mode}.png`),fullPage:true});
         await page.getByRole('button',{name:'Giriş yap ve siparişi tamamla',exact:true}).click();
         await page.locator('#login-email').fill('guest@example.invalid');await page.locator('#login-password').fill('synthetic-password');await page.locator('#login-button').click();
+        if(mode==='slow'){
+          await page.locator('.session-restoring').waitFor();
+          assert.ok(await page.locator('#portal-view').isHidden(),'No empty-cart interstitial while the account is loading');
+          assert.ok(await page.locator('#auth-view').isHidden(),'Login form is not shown again after successful sign-in');
+          await page.screenshot({path:path.join(output,'slow-login-loading.png')});
+          while(!releaseProfile)await new Promise(resolve=>setTimeout(resolve,10));
+          releaseProfile();
+        }
         await page.locator('[data-panel="cart"]').waitFor();
         if(mode==='pending')await page.getByRole('button',{name:'Aynı talebi kontrol et',exact:true}).waitFor();
         else await page.locator('[name="customer_name"]').waitFor();

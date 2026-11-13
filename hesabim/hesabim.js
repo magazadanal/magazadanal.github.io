@@ -313,6 +313,14 @@
     });
   }
 
+  function beginPortalRestore() {
+    document.documentElement.dataset.sessionState = "restoring";
+    document.querySelector(".session-restoring").textContent = "Hesabın ve sepetin hazırlanıyor…";
+    elements.authView.hidden = true;
+    elements.portalView.hidden = true;
+    orderFlow?.show("auth");
+  }
+
   function clearPortalData() {
     const previousOwner = state.profile?.id;
     if (previousOwner) try {
@@ -1110,12 +1118,15 @@
       elements.password.value = "";
       elements.showPassword.checked = false;
       elements.password.type = "password";
-      setPortalVisible(true);
+      beginPortalRestore();
       await loadPortal();
+      if (!state.session) return;
       await restoreView(true);
       void loadHome();
     } catch (error) {
       saveSession(null);
+      clearPortalData();
+      setPortalVisible(false);
       if (!state.webAccountEnabled) {
         showWebMaintenance();
       } else {
@@ -1246,16 +1257,16 @@
     }
 
     state.session = stored;
+    beginPortalRestore();
     try {
       if (!stored.accessToken || stored.expiresAt < Date.now() + 30000) await refreshSession();
       await loadPortal();
       if (!state.session) return;
-      setPortalVisible(true);
       await restoreView();
       void loadHome();
     } catch (error) {
       if ([400, 401, 403].includes(error.status)) handleExpiredSession();
-      else { setPortalVisible(true); await restoreView(); showStatus(elements.portalStatus, "Bağlantı kurulamadı; oturum ve taslak korunuyor. Yeniden bağlandığında bilgiler güncellenecek.", "error"); scheduleRefresh(); }
+      else { await restoreView(); showStatus(elements.portalStatus, "Bağlantı kurulamadı; oturum ve taslak korunuyor. Yeniden bağlandığında bilgiler güncellenecek.", "error"); scheduleRefresh(); }
     }
   }
 
@@ -1321,6 +1332,7 @@
     const guestCart = await orderFlow.resumeGuestCart();
     if (generation !== state.generation || !state.session) return;
     const target = guestCart ? "cart" : freshLogin ? "shop" : new URLSearchParams(location.search).get("view") || saved || "shop";
+    setPortalVisible(true);
     openView(target);
   }
   document.getElementById("signup-toggle").addEventListener("click", () => {
@@ -1344,10 +1356,11 @@
       document.getElementById("signup-password").value = ""; document.getElementById("signup-confirm").value = "";
       if (session) {
         saveSession(session);
+        beginPortalRestore();
         if (await api("/rest/v1/rpc/ensure_customer_profile", { method: "POST", body: { p_full_name: name, p_phone: phone } }) !== true) throw new APIError(403);
-        setPortalVisible(true); await loadPortal(); await restoreView(true);
+        await loadPortal(); if (state.session) await restoreView(true);
       } else showStatus(elements.authStatus, "E-postana gelen doğrulama bağlantısını aç, ardından giriş yap.", "success");
-    } catch { showStatus(elements.authStatus, "Kayıt tamamlanamadı. Bilgilerini kontrol edip yeniden dene.", "error"); }
+    } catch { saveSession(null); clearPortalData(); setPortalVisible(false); showStatus(elements.authStatus, "Kayıt tamamlanamadı. Bilgilerini kontrol edip yeniden dene.", "error"); }
     finally { submit.disabled = false; }
   });
   setInterval(() => {

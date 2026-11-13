@@ -1,6 +1,7 @@
 .portal-page { width: min(900px, calc(100% - 32px)); padding-bottom: 50px; }
 .session-restoring { display: none; min-height: 240px; padding: 64px 0; text-align: center; color: var(--muted); }
 :root[data-session-state="restoring"] #auth-view { display: none !important; }
+:root[data-session-state="restoring"] #portal-view { display: none !important; }
 :root[data-session-state="restoring"] .session-restoring { display: block; }
 .portal-section.home-main { width: 100%; max-width: none; padding: 0; margin: 0; }
 .phone-field { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; min-width: 0; }
