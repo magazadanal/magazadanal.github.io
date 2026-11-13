@@ -7,6 +7,15 @@
   const districts = ["Şişli", "Beşiktaş", "Beyoğlu", "Kağıthane", "Sarıyer"];
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const clone = (value) => JSON.parse(JSON.stringify(value));
+  const orderDocumentTitles = new Map([
+    ["pre_information", "Ön Bilgilendirme Formu"],
+    ["distance_contract", "Mesafeli Satış ve Hizmet Sözleşmesi"],
+    ["cancellation_return", "Cayma, İptal ve İade Koşulları"],
+    ["service_start", "Hizmete Hemen Başlama Onayı"]
+  ]);
+  function orderDocumentTitle(type) {
+    return orderDocumentTitles.get(type) || "Sipariş Sözleşmesi";
+  }
   function splitName(value) {
     const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
     return { firstName: parts[0] || "", lastName: parts.slice(1).join(" ") };
@@ -247,5 +256,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { districts, UUID, clone, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { districts, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });
