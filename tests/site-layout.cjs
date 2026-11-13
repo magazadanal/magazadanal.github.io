@@ -58,7 +58,9 @@ async function verify() {
         const brand = await page.locator("header .brand").boundingBox();
         const account = await page.locator("#home-account-link").boundingBox();
         const toggle = await page.locator(".theme-toggle").boundingBox();
-        assert.ok(account.x >= brand.x + brand.width && toggle.x >= account.x + account.width);
+        assert.ok(Math.abs(brand.x + brand.width / 2 - width / 2) < 1, 'Homepage logo stays centered');
+        assert.ok(width > 560 ? account.x >= brand.x + brand.width : account.y >= brand.y + brand.height, 'Header actions do not overlap the logo');
+        assert.ok(toggle.x >= account.x + account.width);
         assert.ok(toggle.x + toggle.width <= width && Math.abs(account.y - toggle.y) < 5);
         await page.screenshot({ path: path.join(output, `home-${width}-${theme}.png`), fullPage: true });
         if (width === 1280) {

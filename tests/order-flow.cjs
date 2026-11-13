@@ -170,8 +170,9 @@ async function main() {
       assert.equal(await page.locator("[data-cart-count]").innerText(), "", "Public menu does not retain the previous cart count");
       const submittedBeforeGuestNavigation = calls.filter(c => c.path.endsWith("create_customer_order_v7")).length;
       await page.locator('#account-sidebar [data-view="shop"]').click();
-      assert.ok(await page.locator("#auth-view").isVisible());
-      assert.ok(await page.locator("#portal-view").isHidden());
+      assert.ok(await page.locator("#auth-view").isHidden());
+      assert.ok(await page.locator('[data-panel="shop"]').isVisible());
+      assert.ok(await page.locator('[data-panel="profile"]').isHidden());
       assert.equal(calls.filter(c => c.path.endsWith("create_customer_order_v7")).length, submittedBeforeGuestNavigation);
       assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((k) => k.includes("draft.v1"))), false);
       assert.ok(calls.every((c) => !c.path.includes("admin_")));
