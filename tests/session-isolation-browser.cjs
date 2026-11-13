@@ -58,7 +58,9 @@ async function main(){
       assert.ok((await pages[account].locator('#history-list').innerText()).includes(account==='A'?'000101':'000202'));
       assert.ok(!(await pages[account].locator('#history-list').innerText()).includes(account==='A'?'000202':'000101'));
     }
-    await pages.B.locator('[data-view="profile"]').click();await pages.B.locator('#logout-button').click();await pages.B.locator('#auth-view').waitFor();
+    await pages.B.locator('[data-view="profile"]').click();
+    await Promise.all([pages.B.waitForEvent('framenavigated',frame=>frame===pages.B.mainFrame()),pages.B.locator('#logout-button').click()]);
+    await pages.B.locator('#auth-view').waitFor();
     assert.equal(await pages.A.evaluate(()=>document.documentElement.dataset.sessionState),'signed-in','Local logout does not corrupt the other tab');
     await pages.A.locator('[data-view="cart"]').click();assert.ok((await pages.A.locator('.cart-item').innerText()).includes('A ürünü'));
     assert.equal(await pages.B.evaluate(()=>sessionStorage.getItem('magazadanal.web.session.v1')),null);
