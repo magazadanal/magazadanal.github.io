@@ -109,6 +109,10 @@ test("actual account logout clears legacy cached recovery", async () => {
     expiresAt: Date.now() + 3600000, user: { id: "10000000-0000-4000-8000-000000000001", email: "synthetic@example.invalid" } }));
   Object.assign(window, { createMAOrderFlow: () => ({ sync() {}, show() {}, clear() {} }), setTimeout: () => 1,
     clearTimeout() {}, setInterval: () => 1, clearInterval() {}, location: { replace() {} } });
+  const browserModule = require('../hesabim/browser-session.js');
+  const shared = storage();
+  const browserGuard = browserModule.create({ storage: () => shared, locks: { request: async (_, __, operation) => operation() }, uuid: require('node:crypto').randomUUID });
+  window.MABrowserSession = { ...browserModule, create: () => browserGuard };
   vm.runInNewContext(accountSource, { document, window, sessionStorage: store, localStorage: storage(), URLSearchParams,
     AbortController, setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1,
     fetch: async (url) => url.includes("get_public_runtime_status") ? new Promise(() => {}) : ({ ok: true, status: 200, json: async () => ({}) })
