@@ -946,10 +946,10 @@
         if (!frozen && !draft.items.length && !editing) importGuest();
         return true;
       },
-      clear() {
+      clear({ preserveDrafts = false } = {}) {
         searchCache.clear();
         guestOffer = null; guestDismissed = false;
-        if (owner) try { sessionStorage.removeItem(key()); } catch { /* Memory-only browser. */ }
+        if (owner && !preserveDrafts) try { sessionStorage.removeItem(key()); } catch { /* Memory-only browser. */ }
         this.sync({ owner: null, profile: null, addresses: [], runtime: null });
       },
       photo: showPhoto,

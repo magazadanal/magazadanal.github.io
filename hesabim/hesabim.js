@@ -4,6 +4,7 @@
   const SUPABASE_URL = "https://zxqqbzggfbxoasyhueqb.supabase.co";
   const PUBLISHABLE_KEY = "sb_publishable_WaikEJpLmpvHj8Jv5u5k9g_j3YngnF_";
   const SESSION_KEY = "magazadanal.web.session.v1";
+  const browserSession = window.MABrowserSession.create();
   try {
     localStorage.removeItem(SESSION_KEY);
   } catch {
@@ -79,6 +80,7 @@
     loginButton: document.getElementById("login-button"),
     forgotPasswordButton: document.getElementById("forgot-password-button"),
     authStatus: document.getElementById("auth-status"),
+    browserSessionReset: document.getElementById("browser-session-reset"),
     portalStatus: document.getElementById("portal-status"),
     loading: document.getElementById("portal-loading"),
     logoutButton: document.getElementById("logout-button"),
@@ -114,6 +116,7 @@
     if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new APIError(400);
     const owner = state.session?.user?.id;
     const generation = state.generation;
+    if (owner && !Object.prototype.hasOwnProperty.call(options, "token")) assertBrowserSession();
     if (owner && !Object.prototype.hasOwnProperty.call(options, "token") && state.session.expiresAt < Date.now() + 30000) await refreshSession();
     if (/^\/rest\/v1\/rpc\/(?:create_|save_|delete_|update_|record_|set_customer_|customer_respond)/.test(path) && (!state.webAccountEnabled || !state.runtime)) throw new APIError(503);
     const headers = {
@@ -142,6 +145,7 @@
     });
     data = await response.json().catch(() => null);
     } finally { clearTimeout(timeout); }
+    if (owner && !Object.prototype.hasOwnProperty.call(options, "token")) assertBrowserSession();
     if (!Object.prototype.hasOwnProperty.call(options, "token") && owner && (generation !== state.generation || owner !== state.session?.user?.id)) throw new APIError(409);
     if (!response.ok) throw new APIError(response.status);
     return data;
@@ -160,11 +164,12 @@
     };
   }
 
-  function saveSession(session) {
+  function saveSession(session, { preserveDrafts = false } = {}) {
+    if (session) browserSession.assert(session.user?.id, session.browserSessionID);
     if (!session || state.session?.user?.id !== session.user?.id) try {
       sessionStorage.removeItem("magazadanal.password-recovery");
     } catch { /* Recovery credentials from older clients must not survive account changes. */ }
-    if (!session && state.session?.user?.id) try {
+    if (!session && state.session?.user?.id && !preserveDrafts) try {
       sessionStorage.removeItem(`magazadanal.web.view.v1.${state.session.user.id}`);
       sessionStorage.removeItem(`magazadanal.web.support.v1.${state.session.user.id}`);
     } catch { /* No persisted form state. */ }
@@ -223,6 +228,7 @@
     const session = sessionFromResponse(data);
     if (!session || session.user.id !== current.user.id) throw new APIError(401);
     if (generation !== state.generation) throw new APIError(409);
+    session.browserSessionID = current.browserSessionID;
     saveSession(session);
     return session;
     })();
@@ -321,13 +327,13 @@
     orderFlow?.show("auth");
   }
 
-  function clearPortalData() {
+  function clearPortalData({ preserveDrafts = false } = {}) {
     const previousOwner = state.profile?.id;
-    if (previousOwner) try {
+    if (previousOwner && !preserveDrafts) try {
       sessionStorage.removeItem(`magazadanal.web.view.v1.${previousOwner}`);
       sessionStorage.removeItem(`magazadanal.web.support.v1.${previousOwner}`);
     } catch { /* No persisted form in restricted browsers. */ }
-    orderFlow?.clear();
+    orderFlow?.clear({ preserveDrafts });
     state.profile = null;
     state.addresses = [];
     state.orders = [];
@@ -998,6 +1004,35 @@
     showStatus(elements.authStatus, message, "error");
   }
 
+  function endBrowserSession(error) {
+    const token = state.session?.accessToken;
+    state.generation++;
+    saveSession(null, { preserveDrafts: true });
+    clearPortalData({ preserveDrafts: true });
+    setPortalVisible(false);
+    showStatus(elements.authStatus, error.message, "error");
+    elements.browserSessionReset.hidden = false;
+    if (token) void api("/auth/v1/logout?scope=local", { method: "POST", body: {}, token }).catch(() => {});
+  }
+
+  function assertBrowserSession() {
+    try { browserSession.assert(state.session?.user?.id, state.session?.browserSessionID); }
+    catch (error) { endBrowserSession(error); throw error; }
+  }
+
+  async function acceptBrowserSession(session, restoring = false) {
+    const generation = state.generation;
+    try {
+      session.browserSessionID = await browserSession.claim(session.user.id, restoring ? session.browserSessionID : undefined);
+      if (generation !== state.generation) throw new window.MABrowserSession.SessionError("retired");
+      saveSession(session);
+      elements.browserSessionReset.hidden = true;
+    } catch (error) {
+      await api("/auth/v1/logout?scope=local", { method: "POST", body: {}, token: session.accessToken }).catch(() => {});
+      throw error;
+    }
+  }
+
   function normalizePhone(value) {
     const trimmed = String(value || "").trim();
     const hasInternationalPrefix = trimmed.startsWith("+") || trimmed.startsWith("00");
@@ -1023,7 +1058,7 @@
     });
     const session = sessionFromResponse(data);
     if (!session) throw new APIError(401);
-    saveSession(session);
+    await acceptBrowserSession(session);
     return session;
   }
 
@@ -1042,6 +1077,9 @@
 
   async function logout() {
     const token = state.session?.accessToken;
+    const current = state.session;
+    state.generation++;
+    if (current) await browserSession.release(current.user.id, current.browserSessionID).catch(() => {});
     saveSession(null);
     clearPortalData();
     setPortalVisible(false);
@@ -1124,11 +1162,14 @@
       await restoreView(true);
       void loadHome();
     } catch (error) {
-      saveSession(null);
-      clearPortalData();
+      saveSession(null, { preserveDrafts: true });
+      clearPortalData({ preserveDrafts: true });
       setPortalVisible(false);
       if (!state.webAccountEnabled) {
         showWebMaintenance();
+      } else if (error instanceof window.MABrowserSession.SessionError) {
+        showStatus(elements.authStatus, error.message, "error");
+        elements.browserSessionReset.hidden = false;
       } else {
         showStatus(elements.authStatus, "E-posta/telefon veya şifre hatalı.", "error");
       }
@@ -1160,6 +1201,20 @@
   });
 
   elements.logoutButton.addEventListener("click", logout);
+  elements.browserSessionReset.addEventListener("click", async () => {
+    elements.browserSessionReset.disabled = true;
+    try {
+      await browserSession.reset();
+      endBrowserSession(new window.MABrowserSession.SessionError("retired"));
+      elements.browserSessionReset.hidden = true;
+    } catch (error) { showStatus(elements.authStatus, error.message, "error"); }
+    finally { elements.browserSessionReset.disabled = false; }
+  });
+  window.addEventListener("storage", (event) => {
+    if (state.session && (event.key === browserSession.key || event.key === null)) {
+      try { assertBrowserSession(); } catch { /* The tab is already locked and its draft retained. */ }
+    }
+  });
   elements.profilePasswordReset.addEventListener("click", async () => {
     const email = state.session?.user?.email;
     if (!email) {
@@ -1242,8 +1297,10 @@
 
   async function bootstrap() {
     startRuntimeStatusMonitor();
-    const stored = readStoredSession();
-    if (stored) state.session = stored;
+    let stored = readStoredSession();
+    let browserError = null;
+    if (stored) try { await acceptBrowserSession(stored, true); }
+    catch (error) { browserError = error; endBrowserSession(error); stored = null; }
     if (!await enforceRuntimeStatus()) {
       if (document.documentElement.dataset.sessionState === "restoring") document.querySelector(".session-restoring").textContent = state.maintenanceMessage;
       window.setTimeout(bootstrap, 15000); return;
@@ -1252,7 +1309,7 @@
     if (!stored) {
       setPortalVisible(false);
       const publicView = new URLSearchParams(location.search).get("view");
-      if (["shop", "cart"].includes(publicView)) openView(publicView);
+      if (!browserError && ["shop", "cart"].includes(publicView)) openView(publicView);
       return;
     }
 
@@ -1355,7 +1412,7 @@
       const session = sessionFromResponse(data);
       document.getElementById("signup-password").value = ""; document.getElementById("signup-confirm").value = "";
       if (session) {
-        saveSession(session);
+        await acceptBrowserSession(session);
         beginPortalRestore();
         if (await api("/rest/v1/rpc/ensure_customer_profile", { method: "POST", body: { p_full_name: name, p_phone: phone } }) !== true) throw new APIError(403);
         await loadPortal(); if (state.session) await restoreView(true);
