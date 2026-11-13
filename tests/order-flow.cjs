@@ -103,8 +103,9 @@ async function main() {
       await page.getByRole("button", { name: "Kaldır", exact: true }).waitFor();
       assert.equal(await page.locator('.choice-row input:disabled').count(), 1);
       const deliveryOptions = page.locator('fieldset.app-options').first();
-      assert.ok((await deliveryOptions.innerText()).includes('Tahmini 1–3 saatte teslim'));
-      assert.ok((await deliveryOptions.innerText()).includes('Tahmini gün içinde teslim'));
+      assert.ok((await deliveryOptions.innerText()).includes('1-3 saatte teslim (Tahmini)'));
+      assert.ok((await deliveryOptions.innerText()).includes('Gün içinde teslim'));
+      assert.ok(!(await deliveryOptions.innerText()).includes('Tahmini gün'));
       await deliveryOptions.screenshot({path:path.join(output,`delivery-options-${width}-${theme}.png`)});
       await page.getByRole("button", { name: "Öde ve onayla", exact: true }).click();
       await page.getByText("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.", { exact: true }).waitFor();

@@ -15,9 +15,9 @@ function draft(express = true) {
     address:{customer_name:'Test Alıcı',customer_phone:'+905300000000',district:'Şişli',neighborhood:'Test Mahallesi',
       address_line:'Test Sokak',building_no:'1',building_name:'Test Bina',directions:'Test kapı',latitude:41.07,longitude:29}};
 }
-test('both checkout options explicitly say estimated while authoritative wire codes stay unchanged', async () => {
+test('only express checkout ends with the estimated suffix while authoritative wire codes stay unchanged', async () => {
   for (const express of [true,false]) {
-    const label = express ? 'Tahmini 1–3 saatte teslim' : 'Tahmini gün içinde teslim';
+    const label = express ? '1-3 saatte teslim (Tahmini)' : 'Gün içinde teslim';
     assert.equal(R.deliveryLabel(express), label);
     const d = draft(express), docs = await R.documents(d,current,'test@example.invalid',stores);
     const payload = R.payload(d,docs);
@@ -57,8 +57,8 @@ test('new order version leaves membership notices and historical v8 rendering un
 });
 test('public fee labels and contract examples carry the same estimated/maximum distinction', () => {
   const page = fs.readFileSync(path.join(__dirname,'../alisveris-kosullari/index.html'),'utf8');
-  assert.ok(page.includes('Tahmini 1–3 saatte teslim · 1 mağaza, 1 ürün'));
-  assert.ok(page.includes('Tahmini gün içinde teslim · 1 mağaza, 1 ürün'));
+  assert.ok(page.includes('1-3 saatte teslim (Tahmini) · 1 mağaza, 1 ürün'));
+  assert.ok(page.includes('Gün içinde teslim · 1 mağaza, 1 ürün'));
   for (const paragraph of current.order[0].template.split('\n\n').filter(text=>text.startsWith('Teslimat seçenekleri tahmini') || text.startsWith('Kanuni azami süre'))) {
     assert.ok(page.includes('<p>'+paragraph+'</p>'));
   }

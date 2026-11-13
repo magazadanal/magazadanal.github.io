@@ -133,7 +133,7 @@
   }
   function deliveryLabel(express) {
     if (typeof express !== "boolean") throw Error("Teslimat seçeneğini seç.");
-    return express ? "Tahmini 1–3 saatte teslim" : "Tahmini gün içinde teslim";
+    return express ? "1-3 saatte teslim (Tahmini)" : "Gün içinde teslim";
   }
   function legalProductLine(item) {
     const lines = [`${item.store} / ${item.product_name}: ${item.estimated_price} TL`,
