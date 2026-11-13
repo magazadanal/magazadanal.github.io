@@ -535,8 +535,10 @@
         } catch (e) { message(e.message); }
       });
     }
-    function addressForm(parent, address, onChange, { recipientOnly = false } = {}) {
+    function addressForm(parent, address, onChange, { recipientOnly = false, manualFields = [] } = {}) {
       const inputs = {};
+      const mappedKeys = ["district", "neighborhood", "address_line", "building_no"];
+      const corrected = new Set(manualFields.filter(key => mappedKeys.includes(key)));
       const grid = el("div", undefined, "app-form-grid"); parent.append(grid);
       inputs.customer_name = field(grid, "Alıcı adı soyadı", "customer_name", address.customer_name ?? profile?.full_name, "text", { max: 100 });
       if (address.customer_name === undefined) address.customer_name = inputs.customer_name.value;
@@ -569,13 +571,13 @@
           let filled = 0;
           for (const [key] of mappedFields) {
             const value = data?.address?.[key];
-            if (!valid(key, value) || inputs[key].value !== baseline[key]) continue;
+            if (!valid(key, value) || corrected.has(key) || inputs[key].value !== baseline[key]) continue;
             inputs[key].value = value; address[key] = value; filled++;
           }
           if (filled) { address.city = "İstanbul"; onChange(); clearResolvedAddressError(); }
-          const missing = mappedFields.filter(([key]) => !valid(key, data?.address?.[key])).map(([, title]) => title);
-          feedback.hidden = filled > 0 && missing.length === 0;
-          feedback.textContent = !filled ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
+          const missing = mappedFields.filter(([key]) => !valid(key, data?.address?.[key]) && !(corrected.has(key) && inputs[key].value.trim())).map(([, title]) => title);
+          feedback.hidden = (filled > 0 || corrected.size > 0) && missing.length === 0;
+          feedback.textContent = !filled && !corrected.size ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
             : missing.length ? `Haritada bulunamayan bilgiler: ${missing.join(", ")}. Bu alanları kontrol edip tamamla.` : "";
         } catch {
           if (current()) { feedback.textContent = "Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin."; feedback.hidden = false; }
@@ -588,7 +590,10 @@
       function label() { locationButton.textContent = R.point(address.latitude, address.longitude) ? "Teslimat konumu seçildi · Değiştir" : "Teslimat konumu seç"; }
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
         address[key] = input.value;
-        if (["district", "neighborhood", "address_line"].includes(key)) { lookupVersion++; feedback.hidden = true; delete address.latitude; delete address.longitude; label(); }
+        if (mappedKeys.includes(key)) {
+          corrected.add(key); manualFields.splice(0, manualFields.length, ...corrected); feedback.hidden = true;
+        }
+        if (key === "district") { lookupVersion++; delete address.latitude; delete address.longitude; label(); }
         onChange(); clearResolvedAddressError();
       });
       label(); parent.append(locationButton, feedback);
@@ -643,13 +648,15 @@
         select.addEventListener("change", () => {
           const a = addresses.find((v) => v.id === select.value);
           draft.addressID = a?.id || null;
+          draft.addressManualFields = [];
           draft.address = a ? { ...R.clone(a), customer_name: a.recipient_name || profile.full_name, customer_phone: a.recipient_phone || profile.phone } : {};
           mutate(); cartPage();
         });
       }
       const savedAddressSelected = addresses.some(address => address.id === draft.addressID);
       const addressFields = el("div", undefined, savedAddressSelected ? "recipient-only" : "delivery-address-fields"); cartPanel.append(addressFields);
-      addressForm(addressFields, draft.address, () => { if (!savedAddressSelected) draft.addressID = null; mutate(); }, { recipientOnly: savedAddressSelected });
+      if (!Array.isArray(draft.addressManualFields)) draft.addressManualFields = [];
+      addressForm(addressFields, draft.address, () => { if (!savedAddressSelected) draft.addressID = null; mutate(); }, { recipientOnly: savedAddressSelected, manualFields: draft.addressManualFields });
       cartPanel.append(button("Ödemeye geç", () => {
         try { R.validate(draft, stores); message(""); checkout = true; save(); cartPage(); window.scrollTo(0, 0); }
         catch (e) { message(e.message); }

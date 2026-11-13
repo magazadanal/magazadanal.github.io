@@ -10,10 +10,10 @@ const key = `magazadanal.web.draft.v1.${owner}`;
 async function main() {
   const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
   try {
-    for (const scenario of ['desktop', 'mobile', 'partial-street', 'partial-district', 'unavailable', 'manual-number', 'newer-pin', 'navigated-away', 'saved-pending-order']) {
+    for (const scenario of ['desktop', 'mobile', 'partial-street', 'partial-district', 'unavailable', 'manual-number', 'manual-street', 'manual-neighborhood', 'manual-corrections', 'manual-corrections-mobile', 'district-change', 'newer-pin', 'navigated-away', 'saved-pending-order']) {
       const savedEditor = scenario === 'saved-pending-order';
       const partial = scenario.startsWith('partial-');
-      const context = await browser.newContext({viewport: {width: scenario === 'mobile' ? 390 : 1280, height: 950}});
+      const context = await browser.newContext({viewport: {width: scenario.includes('mobile') ? 390 : 1280, height: 950}});
       const page = await context.newPage(), errors = [], lookups = [];
       page.setDefaultTimeout(10000); page.on('pageerror', error => errors.push(error.message));
       const draft = R.newDraft();
@@ -23,7 +23,7 @@ async function main() {
       const frozen = savedEditor ? {payload: null, expectedAmount: 460, result: {authorized: true, result: 'success', order_id: '20000000-0000-4000-8000-000000000001', amount: 460, transfer_code: '000001'}} : null;
       await page.addInitScript(({owner, key, draft, frozen}) => {
         sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, user: {id: owner, email: 'synthetic@example.invalid'}}));
-        sessionStorage.setItem(key, JSON.stringify({owner, updated: Date.now(), draft, stage: 'stores', checkout: false, frozen}));
+        if(!sessionStorage.getItem(key))sessionStorage.setItem(key, JSON.stringify({owner, updated: Date.now(), draft, stage: 'stores', checkout: false, frozen}));
       }, {owner, key, draft, frozen});
       let releaseFirst, startedFirst;
       const delayed = new Promise(resolve => {releaseFirst = resolve;});
@@ -45,7 +45,7 @@ async function main() {
           assert.deepEqual(Object.keys(point).sort(), ['latitude', 'longitude']); assert.ok(R.point(point.latitude, point.longitude));
           lookups.push(point); const index = lookups.length;
           startedFirst();
-          if (index === 1 && ['manual-number', 'newer-pin', 'navigated-away'].includes(scenario)) await delayed;
+          if (index === 1 && ['manual-number', 'manual-street', 'manual-neighborhood', 'newer-pin', 'navigated-away'].includes(scenario)) await delayed;
           if (scenario === 'unavailable') return route.fulfill({status: 503, contentType: 'application/json', body: '{}'});
           data = {address: {city: 'İstanbul', district: 'Beyoğlu', neighborhood: 'Mapped Neighborhood', address_line: index === 2 ? 'Newer Street' : 'Mapped Street', building_no: '42'}};
           if(partial)delete data.address.building_no;
@@ -65,8 +65,9 @@ async function main() {
         await page.getByText(partial?'Cadde / sokak alanını doldur.':'Teslimat konumunu haritadan seç.', {exact: true}).waitFor();
       }
       async function choose(x) {
+        const before = lookups.length;
         await page.getByRole('button', {name: /^Teslimat konumu/}).click();
-        assert.equal(lookups.length, x === 140 ? 1 : 0, 'Opening a map must not transmit a coordinate to reverse lookup');
+        assert.equal(lookups.length, before, 'Opening a map must not transmit a coordinate to reverse lookup');
         await page.locator('.app-map').click({position: {x, y: 170}});
         await page.getByRole('button', {name: 'Bu konumu kullan', exact: true}).click();
       }
@@ -74,6 +75,8 @@ async function main() {
       await page.getByRole('button', {name: 'Teslimat konumu seçildi · Değiştir', exact: true}).waitFor();
       await started;
       if (scenario === 'manual-number') await page.locator('[name="building_no"]').fill('99');
+      if (scenario === 'manual-street') await page.locator('[name="address_line"]').fill('Customer Corrected Street');
+      if (scenario === 'manual-neighborhood') await page.locator('[name="neighborhood"]').fill('Customer Corrected Neighborhood');
       if (scenario === 'newer-pin') {
         await choose(140); await page.waitForFunction(() => document.querySelector('[name="address_line"]').value === 'Newer Street');
       }
@@ -90,7 +93,8 @@ async function main() {
         assert.equal(await page.locator('[name="building_no"]').inputValue(),'','No invented building number');
         if(scenario==='partial-district'){
           await page.locator('[name="address_line"]').fill('Customer Verified Street');
-          await choose(140);await page.getByText(warning,{exact:true}).waitFor();
+          assert.ok(await page.getByRole('button',{name:'Teslimat konumu seçildi · Değiştir',exact:true}).isVisible());
+          await choose(140);await page.getByText('Haritada bulunamayan bilgiler: Bina numarası. Bu alanları kontrol edip tamamla.',{exact:true}).waitFor();
           assert.equal(await page.locator('[name="address_line"]').inputValue(),'Customer Verified Street');
         }
       } else if (scenario === 'navigated-away') {
@@ -99,18 +103,50 @@ async function main() {
         assert.equal(stored.draft.address.address_line, 'Old Street');
         await context.close(); continue;
       } else {
-        await page.waitForFunction(() => ['Mapped Street', 'Newer Street'].includes(document.querySelector('[name="address_line"]').value));
+        await page.waitForFunction(() => ['Mapped Street', 'Newer Street', 'Customer Corrected Street'].includes(document.querySelector('[name="address_line"]').value));
         if (scenario === 'newer-pin') {await page.waitForTimeout(100); assert.equal(await page.locator('[name="address_line"]').inputValue(), 'Newer Street');}
         assert.equal(await page.locator('[name="district"]').inputValue(), 'Beyoğlu');
-        assert.equal(await page.locator('[name="neighborhood"]').inputValue(), 'Mapped Neighborhood');
+        assert.equal(await page.locator('[name="neighborhood"]').inputValue(), scenario==='manual-neighborhood'?'Customer Corrected Neighborhood':'Mapped Neighborhood');
         assert.equal(await page.locator('[name="building_no"]').inputValue(), scenario === 'manual-number' ? '99' : '42');
+        if(scenario==='manual-street')assert.equal(await page.locator('[name="address_line"]').inputValue(),'Customer Corrected Street');
       }
       assert.equal(await page.locator('[name="building_name"]').inputValue(), savedEditor ? '' : draft.address.building_name);
       assert.equal(await page.locator('[name="directions"]').inputValue(), savedEditor ? '' : draft.address.directions);
+      const readDraft=()=>page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)).draft,key);
+      async function settled(){await page.waitForFunction(()=>![...document.querySelectorAll('.app-field ~ [role="status"], .delivery-address-fields [role="status"], .app-dialog [role="status"]')].some(n=>n.textContent==='Adres bilgileri alınıyor…'));}
+      if(scenario.startsWith('manual-corrections')){
+        const selected=(await readDraft()).address;
+        for(const [name,value] of [['address_line','Customer Corrected Street'],['building_no','9A'],['neighborhood','Customer Corrected Neighborhood']]){
+          const input=page.locator(`[name="${name}"]`);assert.ok(await input.isEditable());await input.fill(value);
+        }
+        const corrected=(await readDraft()).address;assert.equal(corrected.latitude,selected.latitude);assert.equal(corrected.longitude,selected.longitude);
+        await choose(140);await settled();
+        await page.getByRole('button',{name:'Ödemeye geç',exact:true}).click();await page.getByRole('heading',{name:'Teslimat ve ödeme',exact:true}).waitFor();
+        await page.getByRole('button',{name:'Sepeti ve adresi düzenle',exact:true}).click();
+        await page.reload();await page.getByRole('heading',{name:'Sepetim',exact:true}).waitFor();
+        await choose(160);await settled();
+        const restored=await readDraft();
+        for(const [name,value] of [['address_line','Customer Corrected Street'],['building_no','9A'],['neighborhood','Customer Corrected Neighborhood']])assert.equal(await page.locator(`[name="${name}"]`).inputValue(),value,'Corrections survive new provider responses and reload');
+        assert.equal(restored.address.latitude,lookups.at(-1).latitude);assert.equal(restored.address.longitude,lookups.at(-1).longitude);
+        const payload=R.payload({...restored,express:false},[]);
+        assert.equal(payload.delivery_address.address_line,'Customer Corrected Street');assert.equal(payload.delivery_address.building_no,'9A');
+        assert.equal(payload.delivery_address.latitude,lookups.at(-1).latitude);assert.equal(payload.delivery_address.longitude,lookups.at(-1).longitude);
+        assert.ok(!Object.hasOwn(payload,'addressManualFields')&&!Object.hasOwn(payload.delivery_address,'addressManualFields'),'Manual-edit flags remain client-only');
+      }
+      if(scenario==='district-change'){
+        await page.locator('[name="district"]').selectOption('Şişli');
+        assert.ok(await page.getByRole('button',{name:'Teslimat konumu seç',exact:true}).isVisible(),'District changes still require explicit point confirmation');
+        await page.getByRole('button',{name:'Ödemeye geç',exact:true}).click();await page.getByText('Teslimat konumunu haritadan seç.',{exact:true}).waitFor();
+        await choose(140);await settled();assert.equal(await page.locator('[name="district"]').inputValue(),'Şişli');
+      }
       await page.locator('[name="building_no"]').fill('9');
       assert.ok(await page.getByRole('button', {name: 'Teslimat konumu seçildi · Değiştir', exact: true}).isVisible(), 'Correcting the building number preserves the chosen map point');
       assert.equal(await page.locator('#order-status').isVisible(), false, 'A valid selected location clears the old location error immediately');
       if (savedEditor) {
+        await page.locator('[name="address_line"]').fill('Saved Corrected Street');await page.locator('[name="neighborhood"]').fill('Saved Corrected Neighborhood');
+        assert.ok(await page.getByRole('button',{name:'Teslimat konumu seçildi · Değiştir',exact:true}).isVisible());
+        await choose(140);await settled();
+        assert.equal(await page.locator('[name="address_line"]').inputValue(),'Saved Corrected Street');assert.equal(await page.locator('[name="neighborhood"]').inputValue(),'Saved Corrected Neighborhood');
         const stored = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)), key);
         assert.deepEqual(stored.frozen, frozen, 'A separate saved-address editor must not alter the submitted receipt');
         await page.getByRole('dialog', {name: 'Yeni adres ekle', exact: true}).getByRole('button', {name: 'Kapat', exact: true}).click();
