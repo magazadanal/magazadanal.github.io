@@ -10,14 +10,16 @@ const key = `magazadanal.web.draft.v1.${owner}`;
 async function main() {
   const browser = await chromium.launch({headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH});
   try {
-    for (const scenario of ['desktop', 'mobile', 'unavailable', 'manual-number', 'newer-pin', 'navigated-away', 'saved-pending-order']) {
+    for (const scenario of ['desktop', 'mobile', 'partial-street', 'partial-district', 'unavailable', 'manual-number', 'newer-pin', 'navigated-away', 'saved-pending-order']) {
       const savedEditor = scenario === 'saved-pending-order';
+      const partial = scenario.startsWith('partial-');
       const context = await browser.newContext({viewport: {width: scenario === 'mobile' ? 390 : 1280, height: 950}});
       const page = await context.newPage(), errors = [], lookups = [];
       page.setDefaultTimeout(10000); page.on('pageerror', error => errors.push(error.message));
       const draft = R.newDraft();
       draft.items = [{client_item_id: crypto.randomUUID(), store: 'Beymen', branch: 'Synthetic Branch', product_name: 'Product', product_link: 'https://example.invalid/product', size: 'M', color: 'Siyah', estimated_price: 100, store_latitude: 41.07, store_longitude: 28.99}];
       draft.address = {customer_name: 'Synthetic Customer', customer_phone: '+905300000000', district: 'Şişli', neighborhood: 'Old Neighborhood', address_line: 'Old Street', building_no: '1', building_name: 'User Building Floor 1 Apartment 2', directions: 'User directions'};
+      if(partial){draft.address.address_line='';draft.address.building_no='';}
       const frozen = savedEditor ? {payload: null, expectedAmount: 460, result: {authorized: true, result: 'success', order_id: '20000000-0000-4000-8000-000000000001', amount: 460, transfer_code: '000001'}} : null;
       await page.addInitScript(({owner, key, draft, frozen}) => {
         sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, user: {id: owner, email: 'synthetic@example.invalid'}}));
@@ -46,6 +48,8 @@ async function main() {
           if (index === 1 && ['manual-number', 'newer-pin', 'navigated-away'].includes(scenario)) await delayed;
           if (scenario === 'unavailable') return route.fulfill({status: 503, contentType: 'application/json', body: '{}'});
           data = {address: {city: 'İstanbul', district: 'Beyoğlu', neighborhood: 'Mapped Neighborhood', address_line: index === 2 ? 'Newer Street' : 'Mapped Street', building_no: '42'}};
+          if(partial)delete data.address.building_no;
+          if(scenario==='partial-district')delete data.address.address_line;
         } else if (['/rest/v1/orders', '/rest/v1/customer_addresses', '/rest/v1/rpc/list_support_tickets_v3', '/rest/v1/rpc/list_order_activity'].includes(url.pathname)) data = [];
         else throw Error('Unexpected request/write: ' + url.pathname);
         return route.fulfill({contentType: 'application/json', body: JSON.stringify(data)});
@@ -58,7 +62,7 @@ async function main() {
         await page.getByRole('button', {name: 'Yeni adres ekle', exact: true}).click();
       } else {
         await page.getByRole('button', {name: 'Ödemeye geç', exact: true}).click();
-        await page.getByText('Teslimat konumunu haritadan seç.', {exact: true}).waitFor();
+        await page.getByText(partial?'Cadde / sokak alanını doldur.':'Teslimat konumunu haritadan seç.', {exact: true}).waitFor();
       }
       async function choose(x) {
         await page.getByRole('button', {name: /^Teslimat konumu/}).click();
@@ -77,6 +81,18 @@ async function main() {
       releaseFirst();
       if (scenario === 'unavailable') {
         await page.getByText('Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin.', {exact: true}).waitFor();
+      } else if(partial){
+        const warning=scenario==='partial-district'?'Haritada bulunamayan bilgiler: Cadde / sokak, Bina numarası. Bu alanları kontrol edip tamamla.':'Haritada bulunamayan bilgiler: Bina numarası. Bu alanları kontrol edip tamamla.';
+        await page.getByText(warning,{exact:true}).waitFor();
+        assert.equal(await page.locator('[name="district"]').inputValue(),'Beyoğlu');
+        assert.equal(await page.locator('[name="neighborhood"]').inputValue(),'Mapped Neighborhood');
+        assert.equal(await page.locator('[name="address_line"]').inputValue(),scenario==='partial-district'?'':'Mapped Street');
+        assert.equal(await page.locator('[name="building_no"]').inputValue(),'','No invented building number');
+        if(scenario==='partial-district'){
+          await page.locator('[name="address_line"]').fill('Customer Verified Street');
+          await choose(140);await page.getByText(warning,{exact:true}).waitFor();
+          assert.equal(await page.locator('[name="address_line"]').inputValue(),'Customer Verified Street');
+        }
       } else if (scenario === 'navigated-away') {
         await page.waitForTimeout(100);
         const stored = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)), key);
