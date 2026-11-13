@@ -257,3 +257,27 @@ tracking viewport/theme (5) and photo (23) cases passed. All backend
 requests in browser tests were mocked; no real account/order/payment was
 created. Publication requires the existing GitHub and Cloudflare checks;
 post-release source/header verification is recorded in the native audit.
+
+## Persistent Public Navigation - 2026-11-13
+
+The existing five-item menu is visible on the public homepage and outside
+the protected account section, including login, signup, session restore
+and logout. Desktop keeps its fixed left sidebar below the header;
+phone/tablet widths below 900px keep the existing five-item presentation
+fixed at the bottom. Short desktop windows retain a scrollable menu.
+
+Menu visibility grants no account or ordering permission. Without a
+session, private-section navigation shows the existing login form; Home
+returns to the public homepage. The private portal remains hidden. The
+existing authenticated order flow, CAPTCHA, `allowed()` checks, JWT/RLS,
+bank/payment rules and profile ownership controls are unchanged. Signup
+fields survive menu clicks; logout clears the cart count and private data.
+This change does not add guest checkout or change the seller/legal model.
+
+Verification: 99 Node tests, eight guest viewport/theme cases plus three
+malformed/restricted/expired-storage cases, eight homepage/login layout
+cases, four checkout/session cases, five order-UI cases, five full order
+flows including logout/menu guards, and synthetic auth-protection tests
+passed. All browser backend/provider calls were mocked. No real account,
+order or payment was created or changed. Desktop/mobile screenshots were
+reviewed; header/content overlap and horizontal overflow checks passed.

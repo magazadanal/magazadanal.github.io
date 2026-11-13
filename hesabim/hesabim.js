@@ -307,6 +307,9 @@
     document.documentElement.dataset.sessionState = isVisible ? "signed-in" : "signed-out";
     elements.authView.hidden = isVisible;
     elements.portalView.hidden = !isVisible;
+    if (!isVisible) document.querySelectorAll("#account-sidebar [data-view]").forEach(button => {
+      button.classList.remove("is-active"); button.setAttribute("aria-current", "false");
+    });
   }
 
   function clearPortalData() {
@@ -1059,6 +1062,13 @@
 
   function openView(viewName) {
     if (!["home", "shop", "cart", "orders", "history", "profile", "addresses", "support"].includes(viewName)) return;
+    if (!state.session) {
+      if (viewName === "home") { window.location.assign("/"); return; }
+      setPortalVisible(false);
+      showStatus(elements.authStatus, "Devam etmek için hesabına giriş yap.");
+      if (!elements.loginForm.hidden) elements.email.focus();
+      return;
+    }
     if (state.session) try { sessionStorage.setItem(`magazadanal.web.view.v1.${state.session.user.id}`, viewName); } catch { /* Memory-only navigation. */ }
     hideStatus(document.getElementById("order-status"));
     orderFlow?.show(viewName);
