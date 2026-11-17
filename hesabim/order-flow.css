@@ -248,3 +248,5 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 :root[data-theme="dark"] .chat-feedback { color: #ffaaa3; }
 .chat-closed { margin: 4px 0 0; }
 @media (max-width: 540px) { .chat-message { max-width: 94%; } }
+.delivery-guarantee span { display: grid; gap: 4px; }
+.delivery-guarantee small { color: inherit; opacity: .75; }

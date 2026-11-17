@@ -605,6 +605,11 @@
       element("strong", "", formatMoney(order.customer_total))
     );
     summary.append(meta); card.append(summary);
+    if (order.delivery_guarantee_selected === true) {
+      const guarantee = element("div", "order-meta order-guarantee");
+      guarantee.append(element("span", "", "Teslimat Güvencesi (KDV dahil)"), element("strong", "", formatMoney(order.delivery_guarantee_fee)));
+      card.append(guarantee);
+    }
 
     card.append(renderTimeline(order));
     if (ACTIVE_ORDER_STATUSES.has(order.status)) card.append(renderCourierLocation(card, order));
@@ -911,7 +916,7 @@
     return api(`/rest/v1/customer_addresses?select=id,title,city,district,neighborhood,address_line,building_no,building_name,directions,is_invoice,latitude,longitude,recipient_name,recipient_phone&customer_id=eq.${state.session.user.id}&order=created_at.desc`);
   }
 
-  const orderSelection = "id,order_no,status,delivery_address_snapshot,selected_store_count,payment_method,customer_total,created_at,order_items(id,store_name,store_branch,product_name,order_note,size,color,estimated_price,final_price)";
+  const orderSelection = "id,order_no,status,delivery_address_snapshot,selected_store_count,payment_method,customer_total,delivery_guarantee_selected,delivery_guarantee_fee,created_at,order_items(id,store_name,store_branch,product_name,order_note,size,color,estimated_price,final_price)";
   async function fetchOrders(filter = "") {
     return api(`/rest/v1/orders?select=${orderSelection}&customer_id=eq.${state.session.user.id}&order=created_at.desc,id.desc&limit=100${filter}`);
   }

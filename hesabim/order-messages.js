@@ -111,6 +111,7 @@
     node.append(title, list, closed, form);
 
     const known = new Map();
+    const CURSOR_OVERLAP_MS = 120000;
     let after = null, open = false, loaded = false, inFlight = false, sending = false, pending = null, orderStatus = null, closedByStatus = false, canWriteFrom = null;
 
     function say(text) { feedback.textContent = text; feedback.hidden = !text; }
@@ -137,8 +138,9 @@
         if (data.status !== "ok") { known.clear(); after = null; open = false; canWriteFrom = null; list.replaceChildren(); sync(); return; }
         let added = false;
         for (const message of data.messages) if (!known.has(message.id)) { known.set(message.id, message); added = true; }
-        const last = data.messages.at(-1);
-        if (last?.created_at) after = last.created_at;
+        // Geç kesinleşen bir mesaj atlanmasın: imleç en yeni mesajın 2 dakika gerisinden; tekrarlar kimlikle ayıklanır.
+        const newest = Math.max(...[...known.values()].map((m) => Date.parse(m.created_at) || 0));
+        if (newest > 0) after = new Date(newest - CURSOR_OVERLAP_MS).toISOString();
         open = data.open; canWriteFrom = data.canWriteFrom; loaded = true;
         if (added) draw();
         sync();
