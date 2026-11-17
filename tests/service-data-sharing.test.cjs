@@ -42,7 +42,8 @@ test('proof sharing is explicit without granting automatic app access or couplin
 
 test('public privacy contains the identical collection, sharing and proof clauses', () => {
   const html = fs.readFileSync(path.join(__dirname, '../privacy/index.html'), 'utf8');
-  assert.ok(html.includes(version));
+  const current = require('../assets/legal-v10.json'); // privacy page is now v10 (v8 catalog above is frozen history)
+  assert.ok(html.includes('2026-11-17-model-b-10'));
   for (const paragraph of current.service_data_notice.split('\n\n')) assert.ok(html.includes(`<p>${paragraph}</p>`), paragraph);
   assert.ok(html.includes(`<p>${current.delivery_proof_notice}</p>`));
   assert.ok(!html.includes('müşteri veya diğer kuryelere açılmaz'));
@@ -53,7 +54,7 @@ test('v7 frozen evidence stays unchanged while notices stay v8 and orders select
   for (const row of previous.profile) assert.equal(hash(row.p_document_text), hashes[row.p_document_type]);
   for (const file of ['hesabim/order-flow.js', 'alisveris-kosullari/conditions.js']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.ok(source.includes('/assets/legal-v9.json'));
+    assert.ok(source.includes('/assets/legal-v10.json'));
     assert.ok(!source.includes('/assets/legal-v7.json'));
   }
 });

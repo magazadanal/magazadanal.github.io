@@ -28,7 +28,7 @@ test("pinned map dependency retains license and audited bytes", () => {
 });
 test("account and public conditions policies allow only their required resources", () => {
   const account = read("hesabim/index.html"), terms = read("alisveris-kosullari/index.html"), preview = read("scripts/preview.cjs");
-  assert.ok(account.includes("connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co;"));
+  assert.ok(account.includes("connect-src 'self' wss://zxqqbzggfbxoasyhueqb.supabase.co https://zxqqbzggfbxoasyhueqb.supabase.co;"));
   assert.ok(account.includes("img-src 'self' data: https://tile.openstreetmap.org;"));
   assert.ok(terms.includes("connect-src 'self';"));
   for (const html of [account, terms]) {

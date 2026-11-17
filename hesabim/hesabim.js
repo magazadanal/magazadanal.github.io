@@ -102,6 +102,37 @@
     profilePasswordReset: document.getElementById("profile-password-reset")
   };
   const locationControllers = new Map();
+  const messagePanels = new Map();
+  // Realtime signals (hesabim/realtime.js): while connected, tracking polls slow down.
+  const TRACKING_POLL_MS = 2000, TRACKING_POLL_REALTIME_MS = 30000;
+  let realtimeConnected = false, trackingSignalTimer = null;
+  const realtime = window.MARealtime?.create({
+    url: `${SUPABASE_URL.replace(/^https:/, "wss:")}/realtime/v1/websocket`,
+    apikey: PUBLISHABLE_KEY,
+    getToken: () => state.session?.accessToken || null,
+    onStatus: (connected) => { realtimeConnected = connected; },
+    onSignal: ({ orderID, kind }) => handleRealtimeSignal(orderID, kind)
+  }) || null;
+  function trackingPollMs() { return realtimeConnected ? TRACKING_POLL_REALTIME_MS : TRACKING_POLL_MS; }
+  function handleRealtimeSignal(orderID, kind) {
+    if (!state.session || !state.orders.some(order => order.id === orderID)) return;
+    if (kind === "message") { const panel = messagePanels.get(orderID); if (panel) void panel.refresh(); }
+    else if (kind === "position") {
+      for (const card of document.querySelectorAll("details[data-order-id]")) if (card.dataset.orderId === orderID) void locationControllers.get(card)?.update();
+    } else if (kind === "order_changed") requestTrackingRefresh();
+  }
+  function requestTrackingRefresh() {
+    if (trackingSignalTimer) return;
+    trackingSignalTimer = window.setTimeout(() => {
+      trackingSignalTimer = null;
+      if (!state.session || document.hidden) return;
+      if (state.loadInFlight) { requestTrackingRefresh(); return; }
+      void loadPortal({ quiet: true, trackingOnly: true });
+    }, 250);
+  }
+  function syncRealtime() {
+    realtime?.setOrders(state.session ? state.orders.filter(order => ACTIVE_ORDER_STATUSES.has(order.status)).map(order => order.id) : []);
+  }
 
   class APIError extends Error {
     constructor(status) {
@@ -118,7 +149,7 @@
     const generation = state.generation;
     if (owner && !Object.prototype.hasOwnProperty.call(options, "token")) assertBrowserSession();
     if (owner && !Object.prototype.hasOwnProperty.call(options, "token") && state.session.expiresAt < Date.now() + 30000) await refreshSession();
-    if (/^\/rest\/v1\/rpc\/(?:create_|save_|delete_|update_|record_|set_customer_|customer_respond)/.test(path) && (!state.webAccountEnabled || !state.runtime)) throw new APIError(503);
+    if (/^\/rest\/v1\/rpc\/(?:create_|save_|delete_|update_|record_|send_order_|set_customer_|customer_respond)/.test(path) && (!state.webAccountEnabled || !state.runtime)) throw new APIError(503);
     const headers = {
       apikey: PUBLISHABLE_KEY,
       "Content-Type": "application/json",
@@ -182,7 +213,9 @@
         // The current page can continue with the in-memory session.
       }
       scheduleRefresh();
+      realtime?.tokenChanged();
     } else {
+      realtime?.stop();
       try {
         sessionStorage.removeItem(SESSION_KEY);
       } catch {
@@ -334,6 +367,8 @@
       sessionStorage.removeItem(`magazadanal.web.support.v1.${previousOwner}`);
     } catch { /* No persisted form in restricted browsers. */ }
     orderFlow?.clear({ preserveDrafts });
+    messagePanels.clear();
+    realtime?.stop();
     state.profile = null;
     state.addresses = [];
     state.orders = [];
@@ -512,8 +547,10 @@
       } catch { if (!destroyed && version === state.generation) clearLocation("Konum şu anda alınamıyor."); }
       finally { inFlight = false; }
     }
+    let lastUpdate = Date.now();
     const timer = setInterval(() => {
-      if (!card.isConnected || version !== state.generation) controller.destroy(); else void update();
+      if (!card.isConnected || version !== state.generation) controller.destroy();
+      else if (Date.now() - lastUpdate >= trackingPollMs() - 100) { lastUpdate = Date.now(); void update(); }
     }, 2000);
     const onToggle = () => { if (card.open) void update(); };
     card.addEventListener("toggle", onToggle);
@@ -523,6 +560,30 @@
     };
     locationControllers.set(card, controller);
     return section;
+  }
+
+  function messagePanelFor(order) {
+    if (!state.session || !(MAOrderMessages.isChatStatus(order.status) || MAOrderMessages.isEndedStatus(order.status))) return null;
+    let panel = messagePanels.get(order.id);
+    if (!panel) {
+      const owner = state.session.user.id, generation = state.generation;
+      panel = MAOrderMessages.createPanel({
+        document, orderID: order.id,
+        rpc: (name, body) => api(`/rest/v1/rpc/${name}`, { method: "POST", body }),
+        uuid: () => crypto.randomUUID(),
+        isCurrent: () => owner === state.session?.user?.id && generation === state.generation
+      });
+      messagePanels.set(order.id, panel);
+    }
+    panel.setOrderStatus(order.status);
+    return panel;
+  }
+  function pollMessages() {
+    for (const order of state.orders) {
+      if (!MAOrderMessages.isChatStatus(order.status)) continue;
+      const panel = messagePanels.get(order.id);
+      if (panel && panel.node.parentNode?.open) void panel.refresh();
+    }
   }
 
   function renderOrderCard(order) {
@@ -547,6 +608,11 @@
 
     card.append(renderTimeline(order));
     if (ACTIVE_ORDER_STATUSES.has(order.status)) card.append(renderCourierLocation(card, order));
+    const chatPanel = messagePanelFor(order);
+    if (chatPanel) {
+      card.append(chatPanel.node);
+      card.addEventListener("toggle", () => { if (card.open) void chatPanel.refresh(); });
+    }
     const products = element("div"); card.append(products);
     for (const product of order.order_items || []) {
       const row = element("div", "order-item-compact");
@@ -980,6 +1046,8 @@
       state.supportTickets = supportTickets || [];
       state.activities = [...state.activities.filter(event => !updatedIDs.has(event.order_id)), ...activities];
       renderAll();
+      pollMessages();
+      syncRealtime();
       if (completed.length) showStatus(elements.portalStatus, `${completed.map(order => `Sipariş ${orderCode(order)}`).join(", ")} teslim edildi. Detayları Profil > Geçmiş siparişlerim bölümünde.`, "success");
     } catch (error) {
       if (error instanceof ProfileError) {
@@ -1420,8 +1488,12 @@
     } catch { saveSession(null); clearPortalData(); setPortalVisible(false); showStatus(elements.authStatus, "Kayıt tamamlanamadı. Bilgilerini kontrol edip yeniden dene.", "error"); }
     finally { submit.disabled = false; }
   });
+  let lastTrackingPoll = 0;
   setInterval(() => {
-    if (state.session && !document.hidden && !document.getElementById("view-orders").hidden) void loadPortal({ quiet: true, trackingOnly: true });
+    if (!state.session || document.hidden || document.getElementById("view-orders").hidden) return;
+    if (Date.now() - lastTrackingPoll < trackingPollMs() - 100) return;
+    lastTrackingPoll = Date.now();
+    void loadPortal({ quiet: true, trackingOnly: true });
   }, 2000);
   setInterval(() => { if (state.session && !document.hidden) void loadPortal({ quiet: true }); }, 15000);
   document.addEventListener("visibilitychange", () => {

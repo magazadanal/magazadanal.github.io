@@ -156,7 +156,7 @@
     validate(draft, stores);
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const t = totals(draft.items, draft.express, draft.promotion?.percent || 0);
-    const detailed = catalog.order.every(doc => doc.document_version === "2026-11-13-model-b-9");
+    const detailed = catalog.order.every(doc => ["2026-11-13-model-b-9", "2026-11-17-model-b-10"].includes(doc.document_version));
     const values = {
       REQUEST_ID: referenceCode(draft, draft.checkoutReference?.owner) || draft.requestID, CREATED_AT: draft.createdAt,
       CUSTOMER_NAME: draft.buyer?.full_name || draft.address.customer_name, CUSTOMER_EMAIL: email,
