@@ -91,7 +91,7 @@ test("panel renders bodies as text only, keeps text when blocked, reuses request
   assert.match(feedback.textContent, /bağlantı paylaşılamaz/); assert.equal(input.value, "x");
   sendResult = { status: "sent", message_id: "m2" }; await submit();
   assert.equal(input.value, ""); assert.equal(feedback.hidden, true);
-  assert.equal(calls.at(-1)[1].p_after, "2026-11-16T10:00:00Z");
+  assert.equal(calls.at(-1)[1].p_after, "2026-11-16T09:58:00.000Z"); // 2 dk geriden (geç kesinleşen mesaj atlanmasın)
 });
 
 test("ended orders become read-only with the closed note", async () => {

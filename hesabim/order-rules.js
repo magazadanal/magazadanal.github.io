@@ -77,12 +77,15 @@
       const age = now - Date.parse(date); return age >= -5000 && age <= 120000;
     });
   }
-  function totals(items, express, percent = 0) {
+  const GUARANTEE_FEE = 360;
+  function totals(items, express, percent = 0, guarantee = false) {
     const products = items.reduce((sum, item) => sum + Number(item.estimated_price), 0);
     const stores = new Set(items.map((item) => item.store.trim())).size;
     const service = items.length && typeof express === "boolean" ? (express ? 360 : 288) + Math.max(0, stores - 1) * 70 + Math.max(0, items.length - 1) * 36 : 0;
     const discount = Math.floor(service * Math.min(100, Math.max(0, percent)) / 100 + 0.5);
-    return { products, service, discount, total: products + service - discount, stores };
+    // Delivery guarantee: per order, VAT included, added after the promotion (never discounted).
+    const fee = guarantee === true && items.length ? GUARANTEE_FEE : 0;
+    return { products, service, discount, guarantee: fee, total: products + service - discount + fee, stores };
   }
   function validStoreName(value) {
     return typeof value === "string" && value === value.trim() && value.length > 0 && value.length <= 100
@@ -155,8 +158,8 @@
   async function documents(draft, catalog, email, stores) {
     validate(draft, stores);
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
-    const t = totals(draft.items, draft.express, draft.promotion?.percent || 0);
-    const detailed = catalog.order.every(doc => ["2026-11-13-model-b-9", "2026-11-17-model-b-10"].includes(doc.document_version));
+    const t = totals(draft.items, draft.express, draft.promotion?.percent || 0, draft.deliveryGuarantee === true);
+    const detailed = catalog.order.every(doc => ["2026-11-13-model-b-9", "2026-11-17-model-b-10", "2026-11-18-model-b-11"].includes(doc.document_version));
     const values = {
       REQUEST_ID: referenceCode(draft, draft.checkoutReference?.owner) || draft.requestID, CREATED_AT: draft.createdAt,
       CUSTOMER_NAME: draft.buyer?.full_name || draft.address.customer_name, CUSTOMER_EMAIL: email,
@@ -164,6 +167,7 @@
       PRODUCT_LINES: draft.items.map((item, i) => `${i + 1}. ` + (detailed ? legalProductLine(item) : `${item.store} / ${item.product_name}: ${item.estimated_price} TL`)).join("\n"),
       STORE_NAMES: [...new Set(draft.items.map((item) => item.store))].join(", "),
       PRODUCT_TOTAL: String(t.products), SERVICE_TOTAL: String(t.service), DISCOUNT: String(t.discount), GRAND_TOTAL: String(t.total),
+      DELIVERY_GUARANTEE: t.guarantee ? "Teslimat Güvencesi (sipariş başına, KDV dahil): 360,00 TL" : "Teslimat Güvencesi: Seçilmedi",
       DELIVERY_OPTION: detailed ? deliveryLabel(draft.express) : draft.express ? "1-3 saatte teslim" : "Gün içinde teslim"
     };
     return Promise.all(catalog.order.map(async (doc) => {
@@ -175,18 +179,20 @@
         transaction_model: doc.transaction_model, content, content_hash: await hash(content), accepted: true, title: doc.title };
     }));
   }
-  function payload(draft, docs) {
+  function payload(draft, docs, guaranteeOffered = false) {
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const address = clone(draft.address);
     address.summary = addressSummary(address);
     address.is_different_region = false;
     address.customer_phone = phone(address.customer_phone);
-    return { p_client_request_id: draft.requestID, items: clone(draft.items), delivery_address: address,
+    const body = { p_client_request_id: draft.requestID, items: clone(draft.items), delivery_address: address,
       delivery_option: draft.express ? "1-3 saatte teslim" : "Gün içinde teslim", payment_method: "bank_transfer",
       legal_acceptances: clone(docs), p_promotion_code: draft.promotion?.code || null };
+    if (guaranteeOffered) body.p_delivery_guarantee = draft.deliveryGuarantee === true;
+    return body;
   }
   function newDraft() {
-    return { requestID: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(), items: [], selectedStores: [], multiStore: false, address: {}, express: null, payment: null, selectionVersion: 1, promotion: null };
+    return { requestID: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(), items: [], selectedStores: [], multiStore: false, address: {}, express: null, payment: null, selectionVersion: 1, promotion: null, deliveryGuarantee: false };
   }
   function referenceCode(draft, owner) {
     const reference = draft.checkoutReference;
@@ -256,5 +262,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { districts, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { districts, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });

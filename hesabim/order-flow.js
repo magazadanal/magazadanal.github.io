@@ -151,7 +151,7 @@
     openMap(); view.body.append(info);
   }
   window.createMAOrderFlow = function (host) {
-    let stores = [], countries = [], legal = null, owner = null, profile = null, addresses = [], runtime = null, currentView = "shop";
+    let stores = [], countries = [], legal = null, legalV11 = null, offer = null, owner = null, profile = null, addresses = [], runtime = null, currentView = "shop";
     let draft = R.newDraft(), stage = "stores", editing = null, checkout = false, frozen = null, busy = false, loaded = false, epoch = 0;
     let accepted = null, serviceAccepted = false, profileAcks = [];
     let profilePhoto = "", profilePhotoLoad = null, profilePhotoRevision = 0;
@@ -197,7 +197,10 @@
       } parent.append(details);
     }
     const key = () => owner ? `magazadanal.web.draft.v1.${owner}` : guestKey;
-    const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0);
+    const guaranteeOn = () => !!offer && draft.deliveryGuarantee === true;
+    const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0, guaranteeOn());
+    // v11 order documents are used only while the server offer is enabled.
+    const activeLegal = () => offer && legalV11 ? { ...legal, order: legalV11.order } : legal;
     const rpc = (name, body = {}) => host.api(`/rest/v1/rpc/${name}`, { method: "POST", body });
     function renderProfilePhoto() {
       profilePhotoButton.replaceChildren();
@@ -692,11 +695,19 @@
       const chosenDelivery = typeof draft.express === "boolean";
       const prices = [["Ürün bedeli", t().products], ["Hizmet ve Teslimat Bedeli (KDV Dahil)", chosenDelivery ? t().service : null]];
       if (draft.promotion && t().discount > 0) prices.push(["Promosyon indirimi", -t().discount]);
+      if (guaranteeOn()) prices.push(["Teslimat Güvencesi (KDV Dahil)", t().guarantee]);
       prices.push(["Toplam", chosenDelivery ? t().total : null]);
       for (const [name, value] of prices) {
         const row = el("div"); row.append(el("dt", name), el("dd", value === null ? "—" : money(value))); summary.append(row);
       }
       cartPanel.append(summary);
+      if (offer) {
+        const guarantee = el("label", undefined, "consent-row delivery-guarantee"); const box = el("input"); box.type = "checkbox"; box.checked = draft.deliveryGuarantee === true; box.disabled = !!frozen || busy;
+        const text = el("span"); text.append(el("strong", `Teslimat Güvencesi — ${offer.fee} TL`), el("small", "Kurye kaynaklı kayıp, çalınma veya hasarda sipariş başına 40.000 TL'ye kadar 7 gün içinde ödeme. Sigorta değildir; yasal haklarınız saklıdır."));
+        guarantee.append(box, text);
+        box.addEventListener("change", () => { try { draft.deliveryGuarantee = box.checked; mutate(); cartPage(); } catch (e) { box.checked = !box.checked; message(e.message); } });
+        cartPanel.append(guarantee);
+      }
       const promoForm = el("form", undefined, "promo-form");
       const code = field(promoForm, "Promosyon kodu", "promotion", draft.promotion?.code || "", "text", { required: false, max: 40 });
       const apply = el("button", draft.promotion ? "Kaldır" : "Uygula", "button compact-button"); apply.type = "submit"; promoForm.append(apply);
@@ -721,7 +732,7 @@
       approval("Ön Bilgilendirme, Mesafeli Sözleşme ve İade Koşulları", !!accepted, async () => {
         const version = epoch;
         try {
-          const docs = await R.documents(draft, legal, host.email(), stores);
+          const docs = await R.documents(draft, activeLegal(), host.email(), stores);
           if (version !== epoch) return;
           const view = modal("Sipariş sözleşmeleri");
           for (const doc of docs.filter((d) => d.document_type !== "service_start")) {
@@ -729,21 +740,21 @@
             section.append(el("summary", doc.title), el("pre", doc.content, "legal-text")); view.body.append(section);
           }
           view.footer.append(button("Okudum ve kabul ediyorum", async () => {
-            const current = await R.documents(draft, legal, host.email(), stores);
+            const current = await R.documents(draft, activeLegal(), host.email(), stores);
             if (version !== epoch || JSON.stringify(current) !== JSON.stringify(docs)) { view.dialog.close(); return message("Bilgiler değişti; sözleşmeleri yeniden onayla."); }
             accepted = docs; view.dialog.close(); cartPage();
           }, "button primary-button"));
         } catch (e) { message(e.message); }
       });
-      const serviceDoc = legal.order.find((d) => d.document_type === "service_start");
+      const serviceDoc = activeLegal().order.find((d) => d.document_type === "service_start");
       approval(serviceDoc.title, serviceAccepted, async () => {
         const version = epoch;
         try {
-          const docs = await R.documents(draft, legal, host.email(), stores), snapshot = docs.find(doc => doc.document_type === "service_start");
+          const docs = await R.documents(draft, activeLegal(), host.email(), stores), snapshot = docs.find(doc => doc.document_type === "service_start");
           if (version !== epoch) return;
           const view = modal(serviceDoc.title); view.body.append(el("pre", snapshot.content, "legal-text"));
           view.footer.append(button("Okudum ve kabul ediyorum", async () => {
-            const current = await R.documents(draft, legal, host.email(), stores);
+            const current = await R.documents(draft, activeLegal(), host.email(), stores);
             if (version !== epoch || current.find(doc => doc.document_type === "service_start").content_hash !== snapshot.content_hash) { view.dialog.close(); return message("Bilgiler değişti; onay metnini yeniden aç."); }
             serviceAccepted = true; view.dialog.close(); cartPage();
           }, "button primary-button"));
@@ -794,11 +805,12 @@
         if (typeof draft.express !== "boolean" || draft.payment !== "bank_transfer") throw Error("Teslimat ve ödeme seçeneği seç.");
         if (!accepted || !serviceAccepted) throw Error("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.");
         const snapshot = R.clone(draft);
-        const docs = await R.documents(snapshot, legal, host.email(), stores);
+        const docs = await R.documents(snapshot, activeLegal(), host.email(), stores);
         if (JSON.stringify(docs) !== JSON.stringify(accepted)) throw Error("Sipariş bilgileri değişti. Sözleşmeleri yeniden onayla.");
         if (!await ensureProfileLegal() || version !== epoch) return;
         if (JSON.stringify(snapshot) !== JSON.stringify(draft)) throw Error("Sipariş bilgileri değişti; yeniden kontrol edip onayla.");
-        frozen = { payload: R.payload(snapshot, docs), expectedAmount: R.totals(snapshot.items, snapshot.express, snapshot.promotion?.percent || 0).total, expectedReferenceCode: referenceEnabled ? R.referenceCode(snapshot, owner) : null, result: null };
+        const useGuarantee = !!offer;
+        frozen = { payload: R.payload(snapshot, docs, useGuarantee), rpcName: useGuarantee ? "create_customer_order_v8" : "create_customer_order_v7", expectedAmount: R.totals(snapshot.items, snapshot.express, snapshot.promotion?.percent || 0, useGuarantee && snapshot.deliveryGuarantee === true).total, expectedReferenceCode: referenceEnabled ? R.referenceCode(snapshot, owner) : null, result: null };
         if (!save()) { frozen = null; throw Error("Sepet bu sekmeye sığmadığı için sipariş gönderilmedi. Fotoğrafları azaltıp yeniden dene."); }
         cartPage(); await sendFrozen(version);
       } catch (e) { message(e.message || "Sipariş gönderilemedi."); }
@@ -829,8 +841,12 @@
         message("");
         if (!save()) throw Error("Sipariş talebi bu sekmede kaydedilemediği için gönderilmedi. Sayfayı kapatma; tarayıcı depolamasını kontrol et.");
         if (!await host.checkRuntime() || !allowed()) throw Error("Sipariş güvenlik kontrolü doğrulanamadı. Talep korunuyor.");
-        const data = await rpc("create_customer_order_v7", frozen.payload);
+        const data = await rpc(frozen.rpcName === "create_customer_order_v8" ? "create_customer_order_v8" : "create_customer_order_v7", frozen.payload);
         if (version !== epoch) return;
+        if ([data?.result, data?.status, data?.[0]?.result, data?.[0]?.status].includes("delivery_guarantee_unavailable")) {
+          offer = null; frozen = null; draft.deliveryGuarantee = false; accepted = null; serviceAccepted = false; save(); cartPage();
+          throw Error("Teslimat Güvencesi şu anda sunulmuyor. Seçim kaldırıldı; sözleşmeleri yeniden onaylayıp siparişi tekrar gönder.");
+        }
         frozen.result = R.result(data?.[0], frozen.expectedAmount);
         frozen.result.referenceChanged = !!frozen.expectedReferenceCode && frozen.result.transfer_code !== frozen.expectedReferenceCode;
         frozen.payload = null; draft.items = []; draft.address = {}; delete draft.editing; save(); updateCartCount(); message(""); cartPage(); host.refresh();
@@ -897,6 +913,14 @@
           const guest = readGuest();
           if (guest) { draft = guest.draft; editing = draft.editing || null; stage = editing && guest.stage === "product" ? "product" : "stores"; }
         }
+        try {
+          const o = await rpc("get_delivery_guarantee_offer");
+          const row = Array.isArray(o) ? o[0] : o;
+          if (row?.enabled === true && Number(row.fee) === R.GUARANTEE_FEE) {
+            const r = await fetch("/assets/legal-v11.json", { credentials: "omit" });
+            if (r.ok) { const v11 = await r.json(); if (v11?.order?.length && v11.order.every(d => d.document_version === "2026-11-18-model-b-11")) { legalV11 = v11; offer = { fee: R.GUARANTEE_FEE }; } }
+          }
+        } catch { offer = null; /* Error means disabled: v7 path stays. */ }
         loaded = true; render();
       } catch { productPanel.replaceChildren(el("p", "Sipariş içeriği yüklenemedi. Sayfayı yeniden aç.", "status status-error")); }
     }
