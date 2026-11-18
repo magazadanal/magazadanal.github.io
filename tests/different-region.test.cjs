@@ -35,3 +35,9 @@ test("payload tells the server the same region class and drops the form marker",
   draft.address = address({ district: "Beşiktaş" });
   assert.equal(R.payload(draft, []).delivery_address.is_different_region, false);
 });
+
+test("a map point inside the service area ends different region mode", () => {
+  assert.equal(R.mapSelectsServiceDistrict(address({ district: "Kadıköy", different_region_selected: true }), "Şişli"), true);
+  assert.equal(R.mapSelectsServiceDistrict(address({ district: "Kadıköy", different_region_selected: true }), undefined), false);
+  assert.equal(R.mapSelectsServiceDistrict(address({ district: "Beşiktaş" }), "Şişli"), false);
+});

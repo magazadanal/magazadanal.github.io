@@ -576,16 +576,24 @@
           const valid = (key, value) => typeof value === "string" && !!value.trim() && value.length <= 200 && !/[<>\u0000-\u001f\u007f]/u.test(value)
             && (key !== "district" || R.districts.includes(value));
           let filled = 0;
+          const regionBefore = R.differentRegion(address);
+          if (R.mapSelectsServiceDistrict(address, data?.address?.district)) {
+            delete address.different_region_selected; customDistrict.value = ""; customDistrictLabel.hidden = true;
+            inputs.district.value = data.address.district; address.district = data.address.district; corrected.delete("district");
+            manualFields.splice(0, manualFields.length, ...corrected); filled++;
+          }
           for (const [key] of mappedFields) {
             const value = data?.address?.[key];
             if (!valid(key, value) || corrected.has(key) || inputs[key].value !== baseline[key]) continue;
             inputs[key].value = value; address[key] = value; filled++;
           }
           if (filled) { address.city = "İstanbul"; onChange(); clearResolvedAddressError(); }
-          const missing = mappedFields.filter(([key]) => !valid(key, data?.address?.[key]) && !(corrected.has(key) && inputs[key].value.trim())).map(([, title]) => title);
+          const missing = mappedFields.filter(([key]) => !(key === "district" && address.different_region_selected === true)
+            && !valid(key, data?.address?.[key]) && !(corrected.has(key) && inputs[key].value.trim())).map(([, title]) => title);
           feedback.hidden = (filled > 0 || corrected.size > 0) && missing.length === 0;
           feedback.textContent = !filled && !corrected.size ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
             : missing.length ? `Haritada bulunamayan bilgiler: ${missing.join(", ")}. Bu alanları kontrol edip tamamla.` : "";
+          if (regionBefore !== R.differentRegion(address)) onRegionChange?.();
         } catch {
           if (current()) { feedback.textContent = "Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin."; feedback.hidden = false; }
         }
@@ -607,7 +615,11 @@
         if (mappedKeys.includes(key)) {
           corrected.add(key); manualFields.splice(0, manualFields.length, ...corrected); feedback.hidden = true;
         }
-        if (key === "district") { lookupVersion++; delete address.latitude; delete address.longitude; label(); }
+        if (key === "district") {
+          lookupVersion++;
+          // Choosing "different region" only names the area; the selected delivery point stays.
+          if (input.value !== R.DIFFERENT_REGION) { delete address.latitude; delete address.longitude; label(); }
+        }
         onChange(); clearResolvedAddressError();
         if (key === "district" && regionBefore !== R.differentRegion(address)) onRegionChange?.();
       });
