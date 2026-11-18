@@ -315,8 +315,6 @@ main { padding: 42px 0 64px; }
   text-align: center;
 }
 
-.app-download-placeholder img { display: block; width: 46px; height: 46px; }
-:root[data-theme="dark"] .app-download-placeholder img { filter: invert(1); }
 .app-download-placeholder span { font-size: 13px; font-weight: 800; }
 
 h1 {
