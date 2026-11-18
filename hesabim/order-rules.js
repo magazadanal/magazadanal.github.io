@@ -11,6 +11,9 @@
     const district = typeof address?.district === "string" ? address.district.trim() : "";
     return !!district && !districts.includes(district);
   }
+  function mapSelectsServiceDistrict(address, district) {
+    return address?.different_region_selected === true && districts.includes(district);
+  }
   function differentRegion(address) {
     return address?.different_region_selected === true || outsideServiceArea(address);
   }
@@ -282,5 +285,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { profileAckAccepted, districts, DIFFERENT_REGION, DIFFERENT_REGION_FEE, outsideServiceArea, differentRegion, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { profileAckAccepted, districts, DIFFERENT_REGION, DIFFERENT_REGION_FEE, outsideServiceArea, differentRegion, mapSelectsServiceDistrict, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });
