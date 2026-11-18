@@ -41,3 +41,8 @@ test("a map point inside the service area ends different region mode", () => {
   assert.equal(R.mapSelectsServiceDistrict(address({ district: "Kadıköy", different_region_selected: true }), undefined), false);
   assert.equal(R.mapSelectsServiceDistrict(address({ district: "Beşiktaş" }), "Şişli"), false);
 });
+
+test("the delivery point source stays out of the order payload", () => {
+  const draft = { ...R.newDraft(), express: true, address: address({ district: "Şişli", location_source: "current" }) };
+  assert.equal("location_source" in R.payload(draft, []).delivery_address, false);
+});

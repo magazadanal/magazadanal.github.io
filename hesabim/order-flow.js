@@ -86,7 +86,7 @@
     function openMap() {
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
       let selected = R.point(initial?.latitude, initial?.longitude) ? [initial.latitude, initial.longitude] : null;
-      let selectedName = "";
+      let selectedName = "", usedCurrentLocation = false;
       const map = L.map(box).setView(selected || [41.072, 28.99], selected ? 16 : 12);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19, referrerPolicy: "strict-origin", attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>'
@@ -138,12 +138,13 @@
         if (!navigator.geolocation) return status(location, "Bu tarayıcı konumu desteklemiyor.", true);
         navigator.geolocation.getCurrentPosition((p) => {
           if (!view.dialog.isConnected) return;
+          usedCurrentLocation = true;
           set(p.coords.latitude, p.coords.longitude); map.setView(selected, 17);
         }, () => status(location, "Konum alınamadı. Haritadan nokta seçebilirsin.", true), { timeout: 12000, maximumAge: 30000 });
       });
       view.footer.append(locate, button("Bu konumu kullan", () => {
         if (!selected) return status(location, "Önce haritadan bir nokta seç.", true);
-        onChoose({ latitude: selected[0], longitude: selected[1], ...(storeName ? { name: R.pickupBranch(storeName, selectedName) } : {}) }); view.dialog.close();
+        onChoose({ latitude: selected[0], longitude: selected[1], ...(storeName ? { name: R.pickupBranch(storeName, selectedName) } : { location_source: usedCurrentLocation ? "current" : "map" }) }); view.dialog.close();
       }, "button primary-button"));
       requestAnimationFrame(() => map.invalidateSize());
       view.dialog.addEventListener("close", () => map.remove(), { once: true });
@@ -602,7 +603,10 @@
         if (parent.closest("[data-panel]")?.dataset.panel !== "cart") return;
         try { R.validateAddress(address); message(""); } catch { /* An incomplete address still needs its remaining fields. */ }
       }
-      function label() { locationButton.textContent = R.point(address.latitude, address.longitude) ? "Teslimat konumu seçildi · Değiştir" : "Teslimat konumu seç"; }
+      function label() {
+        const chosen = address.location_source === "current" ? "✓ Bulunduğum konum seçildi" : address.location_source === "map" ? "✓ Haritadan seçilen konum" : "✓ Teslimat konumu seçildi";
+        locationButton.textContent = R.point(address.latitude, address.longitude) ? `${chosen} · Değiştir` : "Teslimat konumu seç";
+      }
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
         const regionBefore = R.differentRegion(address);
         if (key === "district" && input.value === R.DIFFERENT_REGION) {
@@ -618,7 +622,7 @@
         if (key === "district") {
           lookupVersion++;
           // Choosing "different region" only names the area; the selected delivery point stays.
-          if (input.value !== R.DIFFERENT_REGION) { delete address.latitude; delete address.longitude; label(); }
+          if (input.value !== R.DIFFERENT_REGION) { delete address.latitude; delete address.longitude; delete address.location_source; label(); }
         }
         onChange(); clearResolvedAddressError();
         if (key === "district" && regionBefore !== R.differentRegion(address)) onRegionChange?.();
