@@ -41,19 +41,13 @@ async function verify() {
         const response = await page.goto(baseURL.href);
         assert.equal(response.status(), 200);
         await page.locator(".theme-toggle").waitFor();
-        await page.locator(".home-brand-grid img").evaluateAll(images => Promise.all(images.map(image => image.decode())));
-        assert.equal(await page.locator(".home-brand-grid img").count(), 30);
+        assert.equal(await page.locator(".home-brand-grid img").count(), 0);
+        assert.equal(await page.locator(".home-brand-grid .store-brand").count(), 30);
         assert.equal(await page.locator("#home-account-link").count(), 1);
         assert.equal(await page.locator("header #home-account-link").count(), 1);
         assert.equal(await page.getByText("Seçili mağazalardan ve birçok markadan alışveriş yap.", { exact: true }).count(), 0);
-        assert.equal(await page.locator(".home-brand-grid img[alt='Gap']").getAttribute("src"), "/assets/brands/logo_gap.svg");
-        const logos = await page.locator(".home-brand-grid img").evaluateAll(images => images.map(image => ({
-          alt: image.alt, loaded: image.complete && image.naturalWidth > 0,
-          background: getComputedStyle(image.parentElement).backgroundColor,
-          filter: getComputedStyle(image).filter,
-        })));
-        assert.ok(logos.every(logo => logo.loaded && logo.background === "rgb(255, 255, 255)" && logo.filter === "none"));
-        assert.equal(new Set(logos.map(logo => logo.alt)).size, 30);
+        const storeNames = await page.locator(".home-brand-grid .store-brand").allTextContents();
+        assert.equal(new Set(storeNames.map(name => name.trim())).size, 30);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `Home overflow at ${width}.`);
         const brand = await page.locator("header .brand").boundingBox();
         const account = await page.locator("#home-account-link").boundingBox();
