@@ -40,11 +40,14 @@ test('proof sharing is explicit without granting automatic app access or couplin
   assert.ok(current.order.find(p => p.document_type === 'cancellation_return').template.includes('bu hakların kullanımı ayrıca kişisel veri açık rızası verilmesine bağlanmaz'));
 });
 
-test('public privacy contains the identical collection, sharing and proof clauses', () => {
+test('public privacy contains the identical sharing and proof clauses, each once (KVKK v12)', () => {
   const html = fs.readFileSync(path.join(__dirname, '../privacy/index.html'), 'utf8');
-  const current = require('../assets/legal-v10.json'); // privacy page is now v10 (v8 catalog above is frozen history)
-  assert.ok(html.includes('2026-11-17-model-b-10'));
-  for (const paragraph of current.service_data_notice.split('\n\n')) assert.ok(html.includes(`<p>${paragraph}</p>`), paragraph);
+  const current = require('../assets/legal-v10.json'); // v10 catalog carries the KVKK v12 profile text (v8 catalog above is frozen history)
+  assert.ok(html.includes('2026-11-18-model-b-12'));
+  const [purpose, courier, recipients, basis] = current.service_data_notice.split('\n\n');
+  for (const paragraph of [courier, recipients]) assert.equal(html.split(`<p>${paragraph}</p>`).length, 2, paragraph);
+  // Purpose and legal-basis paragraphs were duplicates of KVKK sections 2, 3 and 5; v12 tells them once there.
+  for (const paragraph of [purpose, basis]) assert.ok(!html.includes(paragraph), paragraph);
   assert.ok(html.includes(`<p>${current.delivery_proof_notice}</p>`));
   assert.ok(!html.includes('müşteri veya diğer kuryelere açılmaz'));
 });

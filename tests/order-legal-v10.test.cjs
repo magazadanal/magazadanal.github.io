@@ -8,6 +8,7 @@ const current = require('../assets/legal-v10.json');
 const v9 = require('../assets/legal-v9.json');
 const {stores} = require('../assets/order-catalog.json');
 const version = '2026-11-17-model-b-10';
+const KVKK_VERSION = '2026-11-18-model-b-12'; // KVKK v12: only the KVKK notice moved on; see kvkk-v12.test.cjs
 const hash = text => createHash('sha256').update(text).digest('hex');
 // User-approved v10 wording (devir/MESAJLASMA_PLANI.md, "v10 metinleri — KULLANICI ONAYLADI"); must stay word for word.
 const SHARING = 'Siparişinizin yerine getirilmesi için gerekli olduğu ölçüde; ilgili siparişte görevli kurye veya anlaşmalı kurye firmasının yetkili personeline şu bilgileriniz paylaşılabilir: alıcının ad ve soyadı, teslimat adresi (mahalle, sokak, kapı numarası, bina adı, adres tarifi, ilçe ve il), kesin teslimat konumu, cep telefonu numarası, ürün bilgileri (ürün adı, bağlantısı, beden, renk, alternatif tercihi, ürün fotoğrafı ve sipariş notu), mağaza bilgileri (ad, şube ve konum) ve siparişe ilişkin uygulama içi mesajlarınız. E-posta adresiniz, kimlik ve vergi numaranız, fatura bilgileriniz ve ödeme bilgileriniz kuryeye gösterilmez.';
@@ -28,7 +29,7 @@ test('approved in-app message clause is in notices, membership, privacy and the 
 });
 test('v10 versions and hashes; v8/v9 catalogs stay as they were', () => {
   for (const row of current.profile) {
-    assert.equal(row.p_document_version, version);
+    assert.equal(row.p_document_version, row.p_document_type === 'kvkk_notice' ? KVKK_VERSION : version);
     assert.equal(hash(row.p_document_text), row.p_document_hash);
     assert.notEqual(row.p_document_hash, v9.profile.find(p => p.p_document_type === row.p_document_type).p_document_hash);
   }
@@ -42,9 +43,9 @@ test('courier phone wording stays at the v9 wording (no delivery-stage detail)',
   const privacy = current.profile.find(p => p.p_document_type === 'privacy').p_document_text;
   assert.ok(privacy.includes('telefon'));
 });
-test('public privacy page and web clients use v10', () => {
+test('public privacy page (KVKK v12) and web clients use the v10 catalog', () => {
   const html = fs.readFileSync(path.join(__dirname, '../privacy/index.html'), 'utf8');
-  assert.ok(html.includes(version));
+  assert.ok(html.includes(KVKK_VERSION));
   assert.ok(html.includes(`<p>${SHARING}</p>`) || html.includes(SHARING));
   assert.ok(html.includes('<h2>10. Uygulama içi mesajlar</h2>') && html.includes(`<p>${MESSAGES}</p>`));
   assert.ok(!html.includes(OLD_SHARING));

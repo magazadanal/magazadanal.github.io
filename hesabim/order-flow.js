@@ -771,7 +771,7 @@
       const version = epoch;
       profileAcks = await rpc("list_customer_legal_acknowledgements");
       if (version !== epoch) return false;
-      const missing = legal.profile.filter((doc) => !profileAcks.some((a) => a.document_type === doc.p_document_type && a.document_version === doc.p_document_version && a.document_hash === doc.p_document_hash));
+      const missing = legal.profile.filter((doc) => !profileAcks.some((a) => R.profileAckAccepted(doc, a)));
       if (!missing.length) return true;
       const view = modal("Hesap sözleşmeleri");
       view.body.append(el("p", "Sipariş öncesi güncel hesap metinlerini inceleyip her birini onayla."));

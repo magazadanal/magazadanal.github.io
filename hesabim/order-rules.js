@@ -257,10 +257,17 @@
     if (rows.length && previousCursor && next.id === previousCursor.id && next.created_at === previousCursor.created_at) throw Error("Sipariş sayfası ilerlemedi.");
     return { rows, cursor: next, hasMore: rows.length === 100 };
   }
+  // Kullanıcı kararı (2026-11-18): KVKK v12 mevcut kullanıcılara yeniden gösterilmez; v10 KVKK onayı geçerli.
+  const STILL_ACCEPTED_PROFILE_ACKS = { kvkk_notice: [["2026-11-17-model-b-10", "4c10e338b87db72429e88619c68e4d9aaabd6c4038089166d0101a774509e19f"]] };
+  function profileAckAccepted(doc, ack) {
+    if (!doc || !ack || ack.document_type !== doc.p_document_type) return false;
+    if (ack.document_version === doc.p_document_version && ack.document_hash === doc.p_document_hash) return true;
+    return (STILL_ACCEPTED_PROFILE_ACKS[doc.p_document_type] || []).some(([v, h]) => ack.document_version === v && ack.document_hash === h);
+  }
   function newestOrderFirst(a, b) {
     const micros = row => Number((String(row.created_at).match(/\.(\d{1,6})/)?.[1] || "").padEnd(6, "0")) % 1000;
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { districts, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { profileAckAccepted, districts, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });
