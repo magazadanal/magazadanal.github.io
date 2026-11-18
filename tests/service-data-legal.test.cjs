@@ -43,5 +43,6 @@ test('web v7 order snapshots personalize and hash all four documents without bro
 });
 test('public privacy retains bounded recipients and photo/location retention after v7', () => {
   const html = fs.readFileSync(path.join(__dirname,'../privacy/index.html'),'utf8');
-  for (const text of ['Her alıcıya tüm bilgiler verilmez','30 günlük saklama','Aydınlatma ve açık rıza süreçleri ayrıdır']) assert.ok(html.includes(text),text);
+  // KVKK v12: the phrase now sits inside the approved recipients paragraph (lower case).
+  for (const text of ['her alıcıya tüm bilgiler verilmez','30 günlük saklama','Aydınlatma ve açık rıza süreçleri ayrıdır']) assert.ok(html.toLocaleLowerCase('tr').includes(text.toLocaleLowerCase('tr')),text);
 });
