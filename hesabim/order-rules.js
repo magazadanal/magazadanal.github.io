@@ -200,6 +200,7 @@
     address.district = address.district.trim();
     address.is_different_region = outsideServiceArea(address);
     delete address.different_region_selected;
+    delete address.location_source;
     address.customer_phone = phone(address.customer_phone);
     const body = { p_client_request_id: draft.requestID, items: clone(draft.items), delivery_address: address,
       delivery_option: draft.express ? "1-3 saatte teslim" : "Gün içinde teslim", payment_method: "bank_transfer",
