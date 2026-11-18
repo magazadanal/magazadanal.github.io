@@ -5,6 +5,15 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
   const districts = ["Şişli", "Beşiktaş", "Beyoğlu", "Kağıthane", "Sarıyer"];
+  const DIFFERENT_REGION = "Farklı bölge talep";
+  const DIFFERENT_REGION_FEE = 783;
+  function outsideServiceArea(address) {
+    const district = typeof address?.district === "string" ? address.district.trim() : "";
+    return !!district && !districts.includes(district);
+  }
+  function differentRegion(address) {
+    return address?.different_region_selected === true || outsideServiceArea(address);
+  }
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const orderDocumentTitles = new Map([
@@ -78,10 +87,10 @@
     });
   }
   const GUARANTEE_FEE = 360;
-  function totals(items, express, percent = 0, guarantee = false) {
+  function totals(items, express, percent = 0, guarantee = false, region = false) {
     const products = items.reduce((sum, item) => sum + Number(item.estimated_price), 0);
     const stores = new Set(items.map((item) => item.store.trim())).size;
-    const service = items.length && typeof express === "boolean" ? (express ? 360 : 288) + Math.max(0, stores - 1) * 70 + Math.max(0, items.length - 1) * 36 : 0;
+    const service = items.length && typeof express === "boolean" ? (region === true ? DIFFERENT_REGION_FEE : express ? 360 : 288) + Math.max(0, stores - 1) * 70 + Math.max(0, items.length - 1) * 36 : 0;
     const discount = Math.floor(service * Math.min(100, Math.max(0, percent)) / 100 + 0.5);
     // Delivery guarantee: per order, VAT included, added after the promotion (never discounted).
     const fee = guarantee === true && items.length ? GUARANTEE_FEE : 0;
@@ -126,7 +135,9 @@
     return true;
   }
   function validateAddress(a) {
-    if (!a || !districts.includes(a.district)) throw Error("Hizmet verilen bir ilçe seç.");
+    if (!a || !(typeof a.district === "string" && a.district.trim())) throw Error(a?.different_region_selected === true ? "İlçe adını yaz." : "İlçe seç.");
+    if (a.different_region_selected === true && districts.includes(a.district.trim())) throw Error("Bu ilçeyi listeden seç.");
+    if (a.district.trim().length < 2 || a.district.length > 100 || /[<>\u0000-\u001f\u007f]/u.test(a.district)) throw Error("İlçe adını kontrol et.");
     for (const [key, label] of [["customer_name", "Alıcı adı soyadı"], ["customer_phone", "Alıcı cep telefonu"], ["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) {
       if (typeof a[key] !== "string" || !a[key].trim()) throw Error(`${label} alanını doldur.`);
       if (a[key].length > 500) throw Error(`${label} en fazla 500 karakter olabilir.`);
@@ -158,7 +169,7 @@
   async function documents(draft, catalog, email, stores) {
     validate(draft, stores);
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
-    const t = totals(draft.items, draft.express, draft.promotion?.percent || 0, draft.deliveryGuarantee === true);
+    const t = totals(draft.items, draft.express, draft.promotion?.percent || 0, draft.deliveryGuarantee === true, differentRegion(draft.address));
     const detailed = catalog.order.every(doc => ["2026-11-13-model-b-9", "2026-11-17-model-b-10", "2026-11-18-model-b-11"].includes(doc.document_version));
     const values = {
       REQUEST_ID: referenceCode(draft, draft.checkoutReference?.owner) || draft.requestID, CREATED_AT: draft.createdAt,
@@ -183,7 +194,9 @@
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
     const address = clone(draft.address);
     address.summary = addressSummary(address);
-    address.is_different_region = false;
+    address.district = address.district.trim();
+    address.is_different_region = outsideServiceArea(address);
+    delete address.different_region_selected;
     address.customer_phone = phone(address.customer_phone);
     const body = { p_client_request_id: draft.requestID, items: clone(draft.items), delivery_address: address,
       delivery_option: draft.express ? "1-3 saatte teslim" : "Gün içinde teslim", payment_method: "bank_transfer",
@@ -269,5 +282,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { profileAckAccepted, districts, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { profileAckAccepted, districts, DIFFERENT_REGION, DIFFERENT_REGION_FEE, outsideServiceArea, differentRegion, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });
