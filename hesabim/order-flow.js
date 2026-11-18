@@ -198,7 +198,7 @@
     }
     const key = () => owner ? `magazadanal.web.draft.v1.${owner}` : guestKey;
     const guaranteeOn = () => !!offer && draft.deliveryGuarantee === true;
-    const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0, guaranteeOn());
+    const t = () => R.totals(draft.items, draft.express, draft.promotion?.percent || 0, guaranteeOn(), R.differentRegion(draft.address));
     // v11 order documents are used only while the server offer is enabled.
     const activeLegal = () => offer && legalV11 ? { ...legal, order: legalV11.order } : legal;
     const rpc = (name, body = {}) => host.api(`/rest/v1/rpc/${name}`, { method: "POST", body });
@@ -538,7 +538,7 @@
         } catch (e) { message(e.message); }
       });
     }
-    function addressForm(parent, address, onChange, { recipientOnly = false, manualFields = [] } = {}) {
+    function addressForm(parent, address, onChange, { recipientOnly = false, manualFields = [], onRegionChange = null } = {}) {
       const inputs = {};
       const mappedKeys = ["district", "neighborhood", "address_line", "building_no"];
       const corrected = new Set(manualFields.filter(key => mappedKeys.includes(key)));
@@ -551,7 +551,11 @@
         inputs.customer_name.addEventListener("input", () => { address.customer_name = inputs.customer_name.value; onChange(); });
         return;
       }
-      inputs.district = field(grid, "İlçe", "district", address.district || "", "select", { values: [{ label: "İlçe seç", value: "" }, ...R.districts] });
+      inputs.district = field(grid, "İlçe", "district", R.differentRegion(address) ? R.DIFFERENT_REGION : address.district || "", "select", { values: [{ label: "İlçe seç", value: "" }, ...R.districts, R.DIFFERENT_REGION] });
+      const customDistrict = field(grid, "İlçe adı", "custom_district", R.outsideServiceArea(address) ? address.district : "", "text", { max: 100 });
+      const customDistrictLabel = customDistrict.closest("label");
+      customDistrictLabel.hidden = inputs.district.value !== R.DIFFERENT_REGION;
+      customDistrict.addEventListener("input", () => { address.district = customDistrict.value; onChange(); clearResolvedAddressError(); });
       for (const [key, label] of [["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) inputs[key] = field(grid, label, key, address[key], "text", { max: 500 });
       let lookupVersion = 0;
       const feedback = el("p", undefined, "muted"); feedback.setAttribute("role", "status"); feedback.hidden = true;
@@ -592,12 +596,20 @@
       }
       function label() { locationButton.textContent = R.point(address.latitude, address.longitude) ? "Teslimat konumu seçildi · Değiştir" : "Teslimat konumu seç"; }
       for (const [key, input] of Object.entries(inputs)) input.addEventListener("input", () => {
-        address[key] = input.value;
+        const regionBefore = R.differentRegion(address);
+        if (key === "district" && input.value === R.DIFFERENT_REGION) {
+          address.different_region_selected = true; address.district = customDistrict.value;
+        } else {
+          address[key] = input.value;
+          if (key === "district") { delete address.different_region_selected; customDistrict.value = ""; }
+        }
+        if (key === "district") customDistrictLabel.hidden = input.value !== R.DIFFERENT_REGION;
         if (mappedKeys.includes(key)) {
           corrected.add(key); manualFields.splice(0, manualFields.length, ...corrected); feedback.hidden = true;
         }
         if (key === "district") { lookupVersion++; delete address.latitude; delete address.longitude; label(); }
         onChange(); clearResolvedAddressError();
+        if (key === "district" && regionBefore !== R.differentRegion(address)) onRegionChange?.();
       });
       label(); parent.append(locationButton, feedback);
     }
@@ -659,7 +671,7 @@
       const savedAddressSelected = addresses.some(address => address.id === draft.addressID);
       const addressFields = el("div", undefined, savedAddressSelected ? "recipient-only" : "delivery-address-fields"); cartPanel.append(addressFields);
       if (!Array.isArray(draft.addressManualFields)) draft.addressManualFields = [];
-      addressForm(addressFields, draft.address, () => { if (!savedAddressSelected) draft.addressID = null; mutate(); }, { recipientOnly: savedAddressSelected, manualFields: draft.addressManualFields });
+      addressForm(addressFields, draft.address, () => { if (!savedAddressSelected) draft.addressID = null; mutate(); }, { recipientOnly: savedAddressSelected, onRegionChange: cartPage, manualFields: draft.addressManualFields });
       cartPanel.append(button("Ödemeye geç", () => {
         try { R.validate(draft, stores); message(""); checkout = true; save(); cartPage(); window.scrollTo(0, 0); }
         catch (e) { message(e.message); }
@@ -676,7 +688,7 @@
       for (const express of [true, false]) {
         const label = el("label", undefined, "choice-row"); const input = el("input"); input.type = "radio"; input.name = "delivery"; input.checked = draft.express === express;
         input.addEventListener("change", () => { draft.express = express; mutate(); cartPage(); });
-        const text = el("div"); text.append(el("strong", R.deliveryLabel(express)), el("span", money(R.totals(draft.items, express, draft.promotion?.percent || 0).service)));
+        const text = el("div"); text.append(el("strong", R.deliveryLabel(express)), el("span", money(R.totals(draft.items, express, draft.promotion?.percent || 0, false, R.differentRegion(draft.address)).service)));
         label.append(input, text); delivery.append(label);
       }
       cartPanel.append(delivery);
@@ -810,7 +822,7 @@
         if (!await ensureProfileLegal() || version !== epoch) return;
         if (JSON.stringify(snapshot) !== JSON.stringify(draft)) throw Error("Sipariş bilgileri değişti; yeniden kontrol edip onayla.");
         const useGuarantee = !!offer;
-        frozen = { payload: R.payload(snapshot, docs, useGuarantee), rpcName: useGuarantee ? "create_customer_order_v8" : "create_customer_order_v7", expectedAmount: R.totals(snapshot.items, snapshot.express, snapshot.promotion?.percent || 0, useGuarantee && snapshot.deliveryGuarantee === true).total, expectedReferenceCode: referenceEnabled ? R.referenceCode(snapshot, owner) : null, result: null };
+        frozen = { payload: R.payload(snapshot, docs, useGuarantee), rpcName: useGuarantee ? "create_customer_order_v8" : "create_customer_order_v7", expectedAmount: R.totals(snapshot.items, snapshot.express, snapshot.promotion?.percent || 0, useGuarantee && snapshot.deliveryGuarantee === true, R.differentRegion(snapshot.address)).total, expectedReferenceCode: referenceEnabled ? R.referenceCode(snapshot, owner) : null, result: null };
         if (!save()) { frozen = null; throw Error("Sepet bu sekmeye sığmadığı için sipariş gönderilmedi. Fotoğrafları azaltıp yeniden dene."); }
         cartPage(); await sendFrozen(version);
       } catch (e) { message(e.message || "Sipariş gönderilemedi."); }

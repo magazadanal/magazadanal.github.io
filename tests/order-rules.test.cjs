@@ -73,7 +73,7 @@ test("missing delivery fields identify only the unfilled address field", () => {
 });
 test("delivery point, district and address completeness are mandatory", () => {
   assert.equal(R.validate(draft(), stores), true);
-  for (const update of [{ latitude: null }, { district: "Kadıköy" }, { building_no: "" }, { directions: "" }, { customer_phone: "123" }]) {
+  for (const update of [{ latitude: null }, { district: "" }, { building_no: "" }, { directions: "" }, { customer_phone: "123" }]) {
     const d = draft(); Object.assign(d.address, update); assert.throws(() => R.validate(d, stores));
   }
   const d = draft(); d.items = Array.from({ length: 31 }, () => item()); assert.throws(() => R.validate(d, stores));
