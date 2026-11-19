@@ -598,6 +598,7 @@
       for (const [key, label] of [["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"], ["building_name", "Bina adı, kat ve daire"], ["directions", "Adres tarifi"]]) inputs[key] = field(grid, label, key, address[key], "text", { max: 500 });
       let lookupVersion = 0;
       const feedback = el("p", undefined, "muted"); feedback.setAttribute("role", "status"); feedback.hidden = true;
+      const streetChoices = el("div", undefined, "street-choices"); streetChoices.setAttribute("role", "group"); streetChoices.setAttribute("aria-label", "Yakındaki sokaklar"); streetChoices.hidden = true;
       const locationButton = button("", () => choosePoint(address, async (p) => {
         const panel = parent.closest("[data-panel]");
         if (!feedback.isConnected || panel?.hidden || !owner || busy || (frozen && panel?.dataset.panel === "cart")) return;
@@ -607,11 +608,12 @@
         const baseline = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value]));
         const current = () => attempt === lookupVersion && epoch === version && owner === customer && feedback.isConnected && !parent.closest("[data-panel]")?.hidden
           && address.latitude === p.latitude && address.longitude === p.longitude;
-        feedback.textContent = "Adres bilgileri alınıyor…"; feedback.hidden = false;
+        feedback.textContent = "Adres bilgileri alınıyor…"; feedback.hidden = false; streetChoices.hidden = true; streetChoices.replaceChildren();
         try {
           const data = { address: await Photon.reverseAddress(p.latitude, p.longitude) };
           if (!current()) return;
-          const mappedFields = [["district", "İlçe"], ["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"]];
+          // Only district and neighbourhood are filled; the street is chosen by the customer from nearby options.
+          const mappedFields = [["district", "İlçe"], ["neighborhood", "Mahalle"]];
           const valid = (key, value) => typeof value === "string" && !!value.trim() && value.length <= 200 && !/[<>\u0000-\u001f\u007f]/u.test(value)
             && (key !== "district" || R.districts.includes(value));
           let filled = 0;
@@ -627,11 +629,23 @@
             inputs[key].value = value; address[key] = value; filled++;
           }
           if (filled) { address.city = "İstanbul"; onChange(); clearResolvedAddressError(); }
+          const streets = Array.isArray(data?.address?.street_options) ? data.address.street_options.filter(value => valid("address_line", value)).slice(0, 4) : [];
+          if (streets.length) {
+            streetChoices.append(el("span", "Yakındaki sokaklar:", "muted"));
+            for (const name of streets) streetChoices.append(button(name, () => {
+              if (!current()) return;
+              inputs.address_line.value = name; address.address_line = name; corrected.add("address_line");
+              manualFields.splice(0, manualFields.length, ...corrected); streetChoices.hidden = true; feedback.hidden = true;
+              onChange(); clearResolvedAddressError();
+            }, "button compact-button street-choice"));
+            streetChoices.hidden = false;
+          }
           const missing = mappedFields.filter(([key]) => !(key === "district" && address.different_region_selected === true)
             && !valid(key, data?.address?.[key]) && !(corrected.has(key) && inputs[key].value.trim())).map(([, title]) => title);
-          feedback.hidden = (filled > 0 || corrected.size > 0) && missing.length === 0;
-          feedback.textContent = !filled && !corrected.size ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
-            : missing.length ? `Haritada bulunamayan bilgiler: ${missing.join(", ")}. Bu alanları kontrol edip tamamla.` : "";
+          const streetHint = streets.length ? "Cadde / sokağı aşağıdaki seçeneklerden seç veya kendin yaz; bina numarasını yaz." : "Cadde / sokak ve bina numarasını yaz.";
+          feedback.hidden = false;
+          feedback.textContent = !filled && !corrected.size && !streets.length ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
+            : missing.length ? `Haritada bulunamayan bilgiler: ${missing.join(", ")}. ${streetHint}` : streetHint;
           if (regionBefore !== R.differentRegion(address)) onRegionChange?.();
         } catch {
           if (current()) { feedback.textContent = "Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin."; feedback.hidden = false; }
@@ -665,7 +679,7 @@
         onChange(); clearResolvedAddressError();
         if (key === "district" && regionBefore !== R.differentRegion(address)) onRegionChange?.();
       });
-      label(); parent.append(locationButton, feedback);
+      label(); parent.append(locationButton, feedback, streetChoices);
     }
     function cartPage() {
       showBack();

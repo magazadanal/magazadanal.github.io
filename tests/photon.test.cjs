@@ -9,32 +9,48 @@ const point = { latitude: 41.0602, longitude: 28.9877 };
 const feature = (properties, xy = [point.longitude, point.latitude]) => ({ type: "Feature", properties, geometry: { type: "Point", coordinates: xy } });
 const reply = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) });
 
-test("address mapping is Turkish-district aware and never invents a door number or uses a business name as street", () => {
+test("only district and neighbourhood are filled; street and door number never come from a single result", () => {
   const full = feature({ countrycode: "TR", county: "Sisli", district: "Test Mahallesi", street: "Test Sokak", housenumber: "1", name: "Untrusted POI" });
-  assert.deepEqual(P.cleanAddress({ features: [full] }, point), { city: "İstanbul", district: "Şişli", neighborhood: "Test Mahallesi", address_line: "Test Sokak", building_no: "1" });
-  // Measured live response shape (2026-11-19): city carries the district, locality the neighbourhood, no house number.
+  assert.deepEqual(P.cleanAddress({ features: [full] }, point), { city: "İstanbul", district: "Şişli", neighborhood: "Test Mahallesi" });
+  // Measured live response shape (2026-11-19): city carries the district, locality the neighbourhood.
   const live = feature({ osm_key: "amenity", type: "house", name: "Burger King", street: "Halaskargazi Caddesi", locality: "19 Mayıs", city: "Şişli", state: "İstanbul", countrycode: "TR" });
-  assert.deepEqual(P.cleanAddress({ features: [live] }, point), { city: "İstanbul", district: "Şişli", neighborhood: "19 Mayıs", address_line: "Halaskargazi Caddesi" });
-  const poi = feature({ countrycode: "TR", city: "Şişli", name: "Some Shop", type: "house", osm_key: "shop" });
-  assert.equal(P.cleanAddress({ features: [poi] }, point).address_line, undefined);
-  const road = feature({ countrycode: "TR", city: "Şişli", locality: "Kuştepe", name: "Köz Sokak", type: "street", osm_key: "highway" });
-  assert.equal(P.cleanAddress({ features: [road] }, point).address_line, "Köz Sokak");
-  const malicious = feature({ countrycode: "TR", city: "Şişli", street: "<script>x</script>" });
-  assert.equal(P.cleanAddress({ features: [malicious] }, point).address_line, undefined);
+  assert.deepEqual(P.cleanAddress({ features: [live] }, point), { city: "İstanbul", district: "Şişli", neighborhood: "19 Mayıs" });
   assert.deepEqual(P.cleanAddress({ features: [feature({ countrycode: "DE", city: "Şişli" })] }, point), {});
   assert.deepEqual(P.cleanAddress({ features: [feature({ countrycode: "TR", city: "Şişli" }, [28.5, 41.2])] }, point), {}, "A far-away result is ignored");
   assert.throws(() => P.cleanAddress({}, point));
 });
 
-test("reverse lookup sends only the coordinate, without cookies or referrer, and maps the answer", async () => {
+test("nearby street options: nearer and repeated first, Sokak/Sokağı merged, platforms and unsafe text dropped, at most four", () => {
+  const at = (dx, dy) => [point.longitude + dx, point.latitude + dy];
+  const data = { features: [
+    feature({ countrycode: "TR", type: "house", osm_key: "amenity", osm_value: "cafe", street: "Hacı Emin Efendi Sokağı" }, at(0.0004, 0.0001)),
+    feature({ countrycode: "TR", type: "house", osm_key: "tourism", osm_value: "hotel", name: "Hotel", street: "Hacı Emin Efendi Sokağı", housenumber: "57" }, at(0.0005, 0.0002)),
+    feature({ countrycode: "TR", type: "street", osm_key: "highway", osm_value: "residential", name: "Güzelbahçe Sokak" }, at(-0.0004, 0.0003)),
+    feature({ countrycode: "TR", type: "street", osm_key: "highway", osm_value: "residential", name: "Güzelbahçe Sokağı" }, at(-0.0005, 0.0004)),
+    feature({ countrycode: "TR", type: "street", osm_key: "highway", osm_value: "service", name: "Peron 3" }, at(0.0001, 0.0001)),
+    feature({ countrycode: "TR", type: "house", osm_key: "highway", osm_value: "bus_stop", name: "Durak", street: "Peron 2" }, at(0.0001, 0.0001)),
+    feature({ countrycode: "TR", type: "house", osm_key: "shop", osm_value: "clothes", name: "Shop", street: "<b>x</b>" }, at(0.0001, 0.0001)),
+    feature({ countrycode: "TR", type: "street", osm_key: "highway", osm_value: "residential", name: "Yedi Kardeşler Sokağı" }, at(0.0006, 0.0004)),
+    feature({ countrycode: "TR", type: "house", osm_key: "shop", osm_value: "clothes", name: "Shop", street: "Şakayık Sokağı" }, at(0.0007, 0.0004)),
+    feature({ countrycode: "TR", type: "house", osm_key: "shop", osm_value: "clothes", name: "Shop", street: "Uzak Sokak" }, at(0.01, 0.01)),
+  ] };
+  assert.deepEqual(P.streetOptions(data, point), ["Hacı Emin Efendi Sokağı", "Güzelbahçe Sokak", "Yedi Kardeşler Sokağı", "Şakayık Sokağı"]);
+  assert.deepEqual(P.streetOptions({}, point), []);
+});
+
+test("reverse lookup sends only the coordinate, without cookies or referrer, and returns street options", async () => {
   let seen;
-  const fetcher = async (url, options) => { seen = { url: new URL(url), options }; return reply({ features: [feature({ countrycode: "TR", city: "Beyoğlu", district: "Asmalımescit", street: "Test Caddesi", housenumber: "7" })] }); };
+  const fetcher = async (url, options) => { seen = { url: new URL(url), options }; return reply({ features: [
+    feature({ countrycode: "TR", city: "Beyoğlu", district: "Asmalımescit", street: "Test Caddesi", housenumber: "7" }),
+    feature({ countrycode: "TR", type: "street", osm_key: "highway", osm_value: "residential", name: "Öteki Sokak", city: "Beyoğlu" }),
+  ] }); };
   const address = await P.reverseAddress(point.latitude, point.longitude, fetcher);
   assert.equal(seen.url.origin, "https://photon.komoot.io"); assert.equal(seen.url.pathname, "/reverse");
   assert.deepEqual([...seen.url.searchParams.keys()].sort(), ["lat", "limit", "lon", "radius"]);
+  assert.equal(seen.url.searchParams.get("limit"), "10"); assert.equal(seen.url.searchParams.get("radius"), "0.15");
   assert.equal(seen.options.credentials, "omit"); assert.equal(seen.options.referrerPolicy, "no-referrer"); assert.equal(seen.options.method, "GET");
   assert.equal(seen.options.body, undefined);
-  assert.deepEqual(address, { city: "İstanbul", district: "Beyoğlu", neighborhood: "Asmalımescit", address_line: "Test Caddesi", building_no: "7" });
+  assert.deepEqual(address, { city: "İstanbul", district: "Beyoğlu", neighborhood: "Asmalımescit", street_options: ["Test Caddesi", "Öteki Sokak"] });
 });
 
 test("reverse lookup outside Istanbul never calls the provider; provider failures carry their status", async () => {
