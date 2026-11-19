@@ -24,14 +24,18 @@ async function main() {
         if (url.origin === base && url.pathname === '/assets/checkout-reference.json') return route.fulfill({contentType:'application/json', body:'{"enabled":false}'});
         if (url.origin === base) return route.continue();
         if (url.hostname === 'tile.openstreetmap.org') return route.fulfill({contentType:'image/png', body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=', 'base64')});
+        if (url.hostname === 'photon.komoot.io') {
+          const cors = {'Access-Control-Allow-Origin': '*'};
+          if (url.pathname === '/reverse') return route.fulfill({headers: cors, contentType: 'application/json', body: JSON.stringify({type: 'FeatureCollection', features: []})});
+          if (url.pathname !== '/api/') throw Error('Unexpected Photon path: ' + url.pathname);
+          assert.equal(url.searchParams.get('q'), 'beymen');
+          return route.fulfill({headers: cors, contentType: 'application/json', body: JSON.stringify({type: 'FeatureCollection', features: [{type: 'Feature', properties: {name: 'Beymen Test Şube'}, geometry: {type: 'Point', coordinates: [28.99, 41.07]}}]})});
+        }
         assert.equal(url.hostname, 'zxqqbzggfbxoasyhueqb.supabase.co');
         let data;
         if (url.pathname.endsWith('get_public_runtime_status')) data = [{customer_web_account_enabled:true, customer_ordering_enabled:true}];
         else if (url.pathname === '/rest/v1/profiles') data = [{id:owner, role:'customer', is_active:true, full_name:'Synthetic Customer', phone:'+905300000000'}];
-        else if (url.pathname === '/functions/v1/web-store-search') {
-          assert.equal(req.postDataJSON().store, 'Beymen');
-          data = {results:[{name:'Beymen Test Şube', latitude:41.07, longitude:28.99}]};
-        } else if (['/rest/v1/orders', '/rest/v1/customer_addresses', '/rest/v1/customer_billing_profiles', '/rest/v1/customer_profile_photos', '/rest/v1/rpc/list_order_activity', '/rest/v1/rpc/list_support_tickets_v3'].includes(url.pathname)) data = [];
+        else if (['/rest/v1/orders', '/rest/v1/customer_addresses', '/rest/v1/customer_billing_profiles', '/rest/v1/customer_profile_photos', '/rest/v1/rpc/list_order_activity', '/rest/v1/rpc/list_support_tickets_v3'].includes(url.pathname)) data = [];
         else { writes.push(url.pathname); throw Error('Unexpected request/write: '+url.pathname); }
         return route.fulfill({contentType:'application/json', body:JSON.stringify(data)});
       });

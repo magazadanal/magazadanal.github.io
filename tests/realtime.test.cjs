@@ -181,7 +181,7 @@ test("account page wiring: signal refreshes, polling interval depends on connect
   assert.match(html, /\/hesabim\/realtime\.js\?v=\d{8}-\d+" defer/);
   assert.ok(html.indexOf("realtime.js") < html.indexOf("hesabim.js?v="));
   const accountHeaders = read("_headers").split("/hesabim/*")[1].split("\n")[1];
-  for (const text of [html, accountHeaders]) assert.ok(text.includes("connect-src 'self' wss://zxqqbzggfbxoasyhueqb.supabase.co https://zxqqbzggfbxoasyhueqb.supabase.co;"));
+  for (const text of [html, accountHeaders]) assert.ok(text.includes("connect-src 'self' wss://zxqqbzggfbxoasyhueqb.supabase.co https://zxqqbzggfbxoasyhueqb.supabase.co https://photon.komoot.io;"));
   const code = read("hesabim/realtime.js").replace(/\/\/.*$/gm, "");
   assert.doesNotMatch(code, /innerHTML|insertAdjacent|document\.write|eval\(|console\./);
 });

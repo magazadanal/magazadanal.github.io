@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const R = window.MAOrderRules;
+  const Photon = window.MAPhoton;
   const money = (n) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(n);
   const el = (tag, text, className) => {
     const node = document.createElement(tag);
@@ -82,7 +83,7 @@
   const searchCache = new Map(); let nextSearchAt = 0;
   function choosePoint(initial, onChoose, storeName = "", searchPlaces = null) {
     const view = modal("Konum seç");
-    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? (searchPlaces ? " Mağaza araması Photon (komoot) hizmetine yalnız mağaza / şube metnini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : " Teslim alınacak şubeyi haritadan seçebilirsin.") : " Bu konumu kullan seçildiğinde adres alanlarını doldurmak için yalnız işaretlediğin koordinatlar sunucumuz üzerinden Photon (komoot) hizmetine iletilir; ad, telefon ve hesap bilgilerin gönderilmez.") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
+    const info = el("p", "Harita açıldığında OpenStreetMap’e IP adresin ve harita alanı iletilir." + (storeName ? (searchPlaces ? " Mağaza araması tarayıcından doğrudan Photon (komoot) hizmetine yalnız mağaza / şube metnini ve IP adresini iletir; kişisel konumun ve hesap bilgilerin gönderilmez." : " Teslim alınacak şubeyi haritadan seçebilirsin.") : " Bu konumu kullan seçildiğinde adres alanlarını doldurmak için işaretlediğin koordinatlar ve IP adresin tarayıcından doğrudan Photon (komoot) hizmetine iletilir; ad, telefon ve hesap bilgilerin gönderilmez.") + " Adresini ve bina numaranı ayrıca kontrol et.", "muted");
     function openMap() {
       const box = el("div", undefined, "app-map"); box.setAttribute("aria-label", "Konum haritası"); view.body.append(box);
       let selected = R.point(initial?.latitude, initial?.longitude) ? [initial.latitude, initial.longitude] : null;
@@ -545,7 +546,7 @@
           if (version !== epoch || editing !== target || busy || frozen) return;
           target.store_latitude = p.latitude; target.store_longitude = p.longitude; target.branch = p.name;
           inputs.branch.value = target.branch; mutate(); locationLabel(); message("");
-        }, storeName, owner ? query => host.api("/functions/v1/web-store-search", { method: "POST", body: { store: storeName, query } }) : null);
+        }, storeName, owner ? async query => ({ results: await Photon.searchStores(storeName, query) }) : null);
       });
       const locationLabel = () => {
         const selected = R.point(editing.store_latitude, editing.store_longitude);
@@ -608,7 +609,7 @@
           && address.latitude === p.latitude && address.longitude === p.longitude;
         feedback.textContent = "Adres bilgileri alınıyor…"; feedback.hidden = false;
         try {
-          const data = await host.api("/functions/v1/web-address-lookup", {method: "POST", body: {latitude: p.latitude, longitude: p.longitude}});
+          const data = { address: await Photon.reverseAddress(p.latitude, p.longitude) };
           if (!current()) return;
           const mappedFields = [["district", "İlçe"], ["neighborhood", "Mahalle"], ["address_line", "Cadde / sokak"], ["building_no", "Bina numarası"]];
           const valid = (key, value) => typeof value === "string" && !!value.trim() && value.length <= 200 && !/[<>\u0000-\u001f\u007f]/u.test(value)

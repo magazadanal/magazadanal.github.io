@@ -21,9 +21,14 @@ async function main() {
         if (url.origin === base) return route.continue();
         if (url.hostname === 'challenges.cloudflare.com') return route.fulfill({contentType: 'application/javascript', body: 'window.turnstile={render(s,o){setTimeout(()=>o.callback("synthetic-ui-login-proof"),30)}};'});
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
+        if (url.hostname === "photon.komoot.io") {
+          const cors = { 'Access-Control-Allow-Origin': '*' };
+          if (url.pathname === '/reverse') return route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [] }) });
+          if (url.pathname !== '/api/') throw Error('Unexpected Photon path: ' + url.pathname);
+          return route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [] }) });
+        }
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co"); let data;
         if (url.pathname.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
-        else if (url.pathname === "/functions/v1/web-store-search") data = { results: [] };
         else if (url.pathname === "/auth/v1/token") {
           if (url.searchParams.get('grant_type') === 'password') assert.equal(route.request().postDataJSON().gotrue_meta_security.captcha_token, 'synthetic-ui-login-proof');
           data = { access_token: "mock-access", refresh_token: "mock-refresh", expires_in: 3600, user: { id: owner, email: "test@example.invalid" } };
