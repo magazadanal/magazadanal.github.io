@@ -34,7 +34,7 @@ test('shopping terms page replaced only the old sentence', () => {
 test('order flow and public contracts load v13 with fresh version stamps', () => {
   for (const file of ['hesabim/order-flow.js', 'alisveris-kosullari/conditions.js']) assert.ok(read(file).includes('/assets/legal-v13.json'), file);
   const account = read('hesabim/index.html');
-  assert.ok(account.includes('order-rules.js?v=20261119-2') && account.includes('order-flow.js?v=20261120-1'));
+  assert.ok(account.includes('order-rules.js?v=20261119-2') && account.includes('order-flow.js?v=20261120-2'));
   assert.ok(read('alisveris-kosullari/index.html').includes('conditions.js?v=20261119-1'));
 });
 
