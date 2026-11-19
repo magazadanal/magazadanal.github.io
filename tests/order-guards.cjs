@@ -33,10 +33,15 @@ async function main() {
         if (url.origin === base && url.pathname === "/assets/checkout-reference.json") return route.fulfill({ contentType: "application/json", body: '{"enabled":false}' });
         if (url.origin === base) return route.continue();
         if (url.hostname === "tile.openstreetmap.org") return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=", "base64") });
+        if (url.hostname === "photon.komoot.io") {
+          const cors = { 'Access-Control-Allow-Origin': '*' };
+          if (url.pathname === '/reverse') return route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [] }) });
+          if (url.pathname !== '/api/') throw Error('Unexpected Photon path: ' + url.pathname);
+          return route.fulfill({ headers: cors, contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [] }) });
+        }
         assert.equal(url.hostname, "zxqqbzggfbxoasyhueqb.supabase.co");
         const p = url.pathname; const body = route.request().postDataJSON(); let result;
         if (p.endsWith("get_public_runtime_status")) result = [{ customer_web_account_enabled: true, customer_ordering_enabled: scenario !== "maintenance" }];
-        else if (p === "/functions/v1/web-address-lookup") result = { address: {} };
         else if (p === "/auth/v1/token") result = { access_token: "mock-access", refresh_token: "mock-refresh", expires_in: 3600, user: { id: refreshIdentity, email: "test@example.invalid" } };
         else if (p === "/rest/v1/profiles") result = [{ id: owner, full_name: "Test", phone: "+905301234567", role: "customer", is_active: true }];
         else if (p === "/rest/v1/customer_addresses") result = addresses;

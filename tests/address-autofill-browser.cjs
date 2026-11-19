@@ -33,6 +33,21 @@ async function main() {
         if (url.origin === base && url.pathname === '/assets/checkout-reference.json') return route.fulfill({contentType: 'application/json', body: '{"enabled":false}'});
         if (url.origin === base) return route.continue();
         if (url.hostname === 'tile.openstreetmap.org') return route.fulfill({contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=', 'base64')});
+        if (url.origin === 'https://photon.komoot.io') {
+          assert.equal(url.pathname, '/reverse'); assert.equal(request.method(), 'GET');
+          assert.deepEqual([...url.searchParams.keys()].sort(), ['lat', 'limit', 'lon', 'radius']);
+          const point = {latitude: Number(url.searchParams.get('lat')), longitude: Number(url.searchParams.get('lon'))};
+          assert.ok(R.point(point.latitude, point.longitude));
+          lookups.push(point); const index = lookups.length;
+          startedFirst();
+          if (index === 1 && ['manual-number', 'manual-street', 'manual-neighborhood', 'newer-pin', 'navigated-away'].includes(scenario)) await delayed;
+          const cors = {'Access-Control-Allow-Origin': '*'};
+          if (scenario === 'unavailable') return route.fulfill({status: 503, headers: cors, contentType: 'application/json', body: '{}'});
+          const properties = {countrycode: 'TR', state: 'İstanbul', city: 'Beyoğlu', district: 'Mapped Neighborhood', street: index === 2 ? 'Newer Street' : 'Mapped Street', housenumber: '42'};
+          if (partial) delete properties.housenumber;
+          if (scenario === 'partial-district') delete properties.street;
+          return route.fulfill({headers: cors, contentType: 'application/json', body: JSON.stringify({type: 'FeatureCollection', features: [{type: 'Feature', properties, geometry: {type: 'Point', coordinates: [point.longitude, point.latitude]}}]})});
+        }
         assert.equal(url.origin, 'https://zxqqbzggfbxoasyhueqb.supabase.co', 'All external requests are intercepted');
         let data;
         if (url.pathname.endsWith('get_public_runtime_status')) data = [{customer_web_account_enabled: true, customer_ordering_enabled: true}];
@@ -40,17 +55,7 @@ async function main() {
         else if (url.pathname === '/rest/v1/customer_profile_photos') {
           assert.equal(request.method(), 'GET'); assert.equal(url.searchParams.get('user_id'), `eq.${owner}`); data = [];
         }
-        else if (url.pathname === '/functions/v1/web-address-lookup') {
-          const point = request.postDataJSON();
-          assert.deepEqual(Object.keys(point).sort(), ['latitude', 'longitude']); assert.ok(R.point(point.latitude, point.longitude));
-          lookups.push(point); const index = lookups.length;
-          startedFirst();
-          if (index === 1 && ['manual-number', 'manual-street', 'manual-neighborhood', 'newer-pin', 'navigated-away'].includes(scenario)) await delayed;
-          if (scenario === 'unavailable') return route.fulfill({status: 503, contentType: 'application/json', body: '{}'});
-          data = {address: {city: 'İstanbul', district: 'Beyoğlu', neighborhood: 'Mapped Neighborhood', address_line: index === 2 ? 'Newer Street' : 'Mapped Street', building_no: '42'}};
-          if(partial)delete data.address.building_no;
-          if(scenario==='partial-district')delete data.address.address_line;
-        } else if (['/rest/v1/orders', '/rest/v1/customer_addresses', '/rest/v1/rpc/list_support_tickets_v3', '/rest/v1/rpc/list_order_activity'].includes(url.pathname)) data = [];
+        else if (['/rest/v1/orders', '/rest/v1/customer_addresses', '/rest/v1/rpc/list_support_tickets_v3', '/rest/v1/rpc/list_order_activity'].includes(url.pathname)) data = [];
         else if (url.pathname === '/functions/v1/order-distance-quote') data = {quote_id:'40000000-0000-4000-8000-000000000001',distance_meters:1200,fee:0,source:'google_routes',expires_at:new Date(Date.now()+1800000).toISOString(),expires_in_seconds:1800};
         else throw Error('Unexpected request/write: ' + url.pathname);
         return route.fulfill({contentType: 'application/json', body: JSON.stringify(data)});

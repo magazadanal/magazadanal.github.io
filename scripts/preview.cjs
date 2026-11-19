@@ -22,7 +22,7 @@ http.createServer(async (req, res) => {
       "Permissions-Policy": `camera=(), microphone=(), geolocation=${account ? "(self)" : "()"}, payment=(), usb=()`,
       "Referrer-Policy": "no-referrer"
     };
-    if (account) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' wss://zxqqbzggfbxoasyhueqb.supabase.co https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'; manifest-src 'self'";
+    if (account) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' wss://zxqqbzggfbxoasyhueqb.supabase.co https://zxqqbzggfbxoasyhueqb.supabase.co https://photon.komoot.io; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'; manifest-src 'self'";
     if (challenge) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://challenges.cloudflare.com; img-src 'self' data:; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self'; frame-src https://challenges.cloudflare.com";
     if (probe) headers["Content-Security-Policy"] = "default-src 'none'; connect-src 'self' https://zxqqbzggfbxoasyhueqb.supabase.co; img-src 'self'; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; frame-src 'self'";
     res.writeHead(200, headers);
