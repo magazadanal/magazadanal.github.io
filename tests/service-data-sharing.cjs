@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {chromium} = require('playwright');
-const legal = require('../assets/legal-v8.json');
+const legal = require('../assets/legal-v13.json');
 const base = process.env.SITE_TEST_URL || 'http://127.0.0.1:8768';
 const output = process.env.SITE_SCREENSHOT_DIR || '/private/tmp/ma-service-data-sharing-v8-web-20261108';
 assert.ok(['127.0.0.1', 'localhost'].includes(new URL(base).hostname));

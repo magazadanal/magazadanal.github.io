@@ -6,7 +6,7 @@
   "use strict";
   const districts = ["Şişli", "Beşiktaş", "Beyoğlu", "Kağıthane", "Sarıyer"];
   const DIFFERENT_REGION = "Farklı bölge talep";
-  const DIFFERENT_REGION_FEE = 783;
+  const DIFFERENT_REGION_FEE = 450;
   function outsideServiceArea(address) {
     const district = typeof address?.district === "string" ? address.district.trim() : "";
     return !!district && !districts.includes(district);
@@ -90,14 +90,57 @@
     });
   }
   const GUARANTEE_FEE = 360;
-  function totals(items, express, percent = 0, guarantee = false, region = false) {
+  // Kilometre ücreti: ilk 5 km ücretsiz, sonra her tam km 10 TL (KDV dahil). Asıl tutarı sunucu belirler.
+  function distanceFee(meters) {
+    return Number.isInteger(meters) && meters >= 0 ? Math.max(Math.floor(meters / 1000) - 5, 0) * 10 : 0;
+  }
+  function distanceQuoteRequest(draft) {
+    const delivery = draft?.address, items = draft?.items;
+    if (!Array.isArray(items) || !items.length || !point(delivery?.latitude, delivery?.longitude)
+      || !items.every(item => point(item.store_latitude, item.store_longitude))) return null;
+    const stores = new Map(items.map(item => [`${item.store_latitude},${item.store_longitude}`, { latitude: item.store_latitude, longitude: item.store_longitude }]));
+    return { delivery: { latitude: delivery.latitude, longitude: delivery.longitude }, stores: [...stores.keys()].sort().map(key => stores.get(key)) };
+  }
+  function distanceQuoteKey(draft) {
+    const request = distanceQuoteRequest(draft);
+    return request ? JSON.stringify(request) : null;
+  }
+  // Kalan süre sunucudan gelir ve teklifin alındığı yerel andan ölçülür; böylece yanlış cihaz saati teklifi bozmaz.
+  function distanceQuote(row, key, receivedAt = Date.now()) {
+    const remaining = row?.expires_in_seconds;
+    if (remaining !== undefined && remaining !== null && (!Number.isInteger(remaining) || remaining < 0)) throw Error("Teslimat bedeli doğrulanamadı.");
+    if (!key || !UUID.test(row?.quote_id || "") || !Number.isInteger(row.distance_meters) || row.distance_meters < 0
+      || row.fee !== distanceFee(row.distance_meters) || !["google_routes", "straight_line_google_error", "straight_line_quota"].includes(row.source)
+      || !Number.isFinite(Date.parse(row.expires_at))) throw Error("Teslimat bedeli doğrulanamadı.");
+    const quote = { key, quote_id: row.quote_id, fee: row.fee, expires_at: row.expires_at };
+    return Number.isInteger(remaining) ? { ...quote, expires_in_seconds: remaining, received_at: receivedAt } : quote;
+  }
+  // Kalan süre yoksa eski davranış: sunucunun bitiş zamanı cihaz saatiyle karşılaştırılır.
+  function distanceQuoteUnexpired(quote, now) {
+    if (!Number.isInteger(quote?.expires_in_seconds) || !Number.isFinite(quote.received_at)) return Date.parse(quote?.expires_at) > now + 60000;
+    const elapsed = now - quote.received_at;
+    return elapsed >= -60000 && elapsed + 60000 < quote.expires_in_seconds * 1000;
+  }
+  // Teklif yalnız aynı teslimat noktası ve mağazalar için, süresi dolmamışken geçerlidir.
+  function activeDistanceQuote(draft, now = Date.now()) {
+    const quote = draft?.distanceQuote;
+    return quote && quote.key === distanceQuoteKey(draft) && distanceQuoteUnexpired(quote, now) ? quote : null;
+  }
+  // Taslağa bağlı teklifin ücreti; saate bakmaz, böylece sözleşme ve beklenen tutar gönderim boyunca aynı kalır.
+  function quotedDistanceFee(draft) {
+    const quote = draft?.distanceQuote;
+    return quote && quote.key === distanceQuoteKey(draft) ? quote.fee : 0;
+  }
+  function totals(items, express, percent = 0, guarantee = false, region = false, distance = 0) {
     const products = items.reduce((sum, item) => sum + Number(item.estimated_price), 0);
     const stores = new Set(items.map((item) => item.store.trim())).size;
     const service = items.length && typeof express === "boolean" ? (region === true ? DIFFERENT_REGION_FEE : express ? 360 : 288) + Math.max(0, stores - 1) * 70 + Math.max(0, items.length - 1) * 36 : 0;
     const discount = Math.floor(service * Math.min(100, Math.max(0, percent)) / 100 + 0.5);
     // Delivery guarantee: per order, VAT included, added after the promotion (never discounted).
     const fee = guarantee === true && items.length ? GUARANTEE_FEE : 0;
-    return { products, service, discount, guarantee: fee, total: products + service - discount + fee, stores };
+    // Kilometre ücreti indirimden sonra eklenir; müşteriye hizmet ve teslimat bedelinin içinde gösterilir.
+    const km = items.length && typeof express === "boolean" && Number.isInteger(distance) && distance > 0 ? distance : 0;
+    return { products, service, distance: km, serviceTotal: service + km, discount, guarantee: fee, total: products + service + km - discount + fee, stores };
   }
   function validStoreName(value) {
     return typeof value === "string" && value === value.trim() && value.length > 0 && value.length <= 100
@@ -172,15 +215,15 @@
   async function documents(draft, catalog, email, stores) {
     validate(draft, stores);
     if (typeof draft.express !== "boolean") throw Error("Teslimat seçeneğini seç.");
-    const t = totals(draft.items, draft.express, draft.promotion?.percent || 0, draft.deliveryGuarantee === true, differentRegion(draft.address));
-    const detailed = catalog.order.every(doc => ["2026-11-13-model-b-9", "2026-11-17-model-b-10", "2026-11-18-model-b-11"].includes(doc.document_version));
+    const t = totals(draft.items, draft.express, draft.promotion?.percent || 0, draft.deliveryGuarantee === true, differentRegion(draft.address), quotedDistanceFee(draft));
+    const detailed = catalog.order.every(doc => ["2026-11-13-model-b-9", "2026-11-17-model-b-10", "2026-11-18-model-b-11", "2026-11-19-model-b-13"].includes(doc.document_version));
     const values = {
       REQUEST_ID: referenceCode(draft, draft.checkoutReference?.owner) || draft.requestID, CREATED_AT: draft.createdAt,
       CUSTOMER_NAME: draft.buyer?.full_name || draft.address.customer_name, CUSTOMER_EMAIL: email,
       CUSTOMER_PHONE: draft.buyer?.phone || draft.address.customer_phone, DELIVERY_ADDRESS: addressSummary(draft.address),
       PRODUCT_LINES: draft.items.map((item, i) => `${i + 1}. ` + (detailed ? legalProductLine(item) : `${item.store} / ${item.product_name}: ${item.estimated_price} TL`)).join("\n"),
       STORE_NAMES: [...new Set(draft.items.map((item) => item.store))].join(", "),
-      PRODUCT_TOTAL: String(t.products), SERVICE_TOTAL: String(t.service), DISCOUNT: String(t.discount), GRAND_TOTAL: String(t.total),
+      PRODUCT_TOTAL: String(t.products), SERVICE_TOTAL: String(t.serviceTotal), DISCOUNT: String(t.discount), GRAND_TOTAL: String(t.total),
       DELIVERY_GUARANTEE: t.guarantee ? "Teslimat Güvencesi (sipariş başına, KDV dahil): 360,00 TL" : "Teslimat Güvencesi: Seçilmedi",
       DELIVERY_OPTION: detailed ? deliveryLabel(draft.express) : draft.express ? "1-3 saatte teslim" : "Gün içinde teslim"
     };
@@ -204,12 +247,19 @@
     address.customer_phone = phone(address.customer_phone);
     const body = { p_client_request_id: draft.requestID, items: clone(draft.items), delivery_address: address,
       delivery_option: draft.express ? "1-3 saatte teslim" : "Gün içinde teslim", payment_method: "bank_transfer",
-      legal_acceptances: clone(docs), p_promotion_code: draft.promotion?.code || null };
+      legal_acceptances: clone(docs), p_distance_quote_id: draft.distanceQuote?.quote_id || null, p_promotion_code: draft.promotion?.code || null };
     if (guaranteeOffered) body.p_delivery_guarantee = draft.deliveryGuarantee === true;
     return body;
   }
   function newDraft() {
     return { requestID: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(), items: [], selectedStores: [], multiStore: false, address: {}, express: null, payment: null, selectionVersion: 1, promotion: null, deliveryGuarantee: false };
+  }
+  // Sayfa yenilenince sepet yalnız dondurulmuş talepte kalır; talep geri dönerse sepet oradan kurulur.
+  function draftFromFrozen(draft, frozenPayload) {
+    if (draft?.items?.length || !Array.isArray(frozenPayload?.items) || !frozenPayload.items.length) return draft;
+    const { summary, is_different_region: outside, ...address } = clone(frozenPayload.delivery_address || {});
+    if (outside === true) address.different_region_selected = true;
+    return { ...newDraft(), ...draft, items: clone(frozenPayload.items), address, payment: frozenPayload.payment_method, deliveryGuarantee: frozenPayload.p_delivery_guarantee === true };
   }
   function referenceCode(draft, owner) {
     const reference = draft.checkoutReference;
@@ -286,5 +336,5 @@
     return (Date.parse(b.created_at) - Date.parse(a.created_at) || 0) || micros(b) - micros(a)
       || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   }
-  return { profileAckAccepted, districts, DIFFERENT_REGION, DIFFERENT_REGION_FEE, outsideServiceArea, differentRegion, mapSelectsServiceDistrict, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
+  return { distanceFee, distanceQuoteRequest, distanceQuoteKey, distanceQuote, activeDistanceQuote, quotedDistanceFee, draftFromFrozen, profileAckAccepted, districts, DIFFERENT_REGION, DIFFERENT_REGION_FEE, outsideServiceArea, differentRegion, mapSelectsServiceDistrict, UUID, clone, orderDocumentTitle, splitName, signupName, splitPhone, joinedPhone, point, link, clipboardLink, phone, freshPosition, totals, GUARANTEE_FEE, validStoreName, productName, pickupBranch, missingStores, validateItem, validateAddress, validate, addressSummary, hash, deliveryLabel, legalProductLine, documents, payload, newDraft, referenceCode, reservation, result, paymentCents, extraPaymentDetails, currentOrderRequest, orderCursor, olderOrdersFilter, orderHistoryPage, newestOrderFirst };
 });

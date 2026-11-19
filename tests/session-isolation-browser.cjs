@@ -34,6 +34,7 @@ async function main(){
           data=[{id:user.order,order_no:account==='A'?'000101':'000202',status:'delivered',customer_total:user.price+360,created_at:'2026-11-13T10:00:00Z',order_items:[]}];
         }else if(p==='/rest/v1/customer_addresses'){
           assert.equal(url.searchParams.get('customer_id'),`eq.${user.id}`);data=[];
+        }else if(p.endsWith('list_order_messages')){data=[];
         }else if(p.endsWith('list_order_activity')){assert.deepEqual(body.target_order_ids,[user.order]);data=[];}
         else if(p.endsWith('list_support_tickets_v3'))data=[{id:crypto.randomUUID(),message:`Sadece ${account}`,status:'closed',created_at:'2026-11-13T10:00:00Z',replies:[]}];
         else if(p==='/rest/v1/customer_profile_photos'){assert.equal(url.searchParams.get('user_id'),`eq.${user.id}`);data=[];}

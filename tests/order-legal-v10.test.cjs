@@ -51,7 +51,7 @@ test('public privacy page (KVKK v12) and web clients use the v10 catalog', () =>
   assert.ok(!html.includes(OLD_SHARING));
   for (const file of ['hesabim/order-flow.js', 'alisveris-kosullari/conditions.js']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.ok(source.includes('/assets/legal-v10.json'));
+    assert.ok(source.includes('/assets/legal-v13.json'));
     assert.ok(!source.includes('/assets/legal-v9.json'));
   }
 });

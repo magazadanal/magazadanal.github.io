@@ -68,7 +68,7 @@ async function run() {
         else if (url.pathname.endsWith("get_order_delivery_code")) result = [{ delivery_code: "1234" }];
         else if (url.pathname === "/auth/v1/logout") result = {};
         else if (["/rest/v1/customer_addresses", "/rest/v1/customer_profile_photos"].includes(url.pathname)
-          || ["list_order_activity", "list_support_tickets_v3", "get_order_product_photos"].some(name => url.pathname.endsWith(name))) result = [];
+          || ["list_order_activity", "list_support_tickets_v3", "get_order_product_photos", "list_order_messages"].some(name => url.pathname.endsWith(name))) result = [];
         else throw Error("Unexpected API: " + url.pathname);
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
       });

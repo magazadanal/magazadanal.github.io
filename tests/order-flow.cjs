@@ -2,12 +2,15 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { chromium } = require("playwright");
-const legal = require("../assets/legal-v10.json");
+const legal = require("../assets/legal-v13.json");
 const base = process.env.SITE_TEST_URL || "http://127.0.0.1:8766";
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
 const output = process.env.SITE_SCREENSHOT_DIR || "/private/tmp/ma-web-order-20261105";
 const owner = "10000000-0000-4000-8000-000000000001";
 const orderID = "20000000-0000-4000-8000-000000000001";
+const quoteID = "40000000-0000-4000-8000-000000000001";
+// 7,9 km yol: 5 km sonrası 2 tam km × 10 TL = 20 TL; hizmet bedelinin içinde, ayrı satır yok.
+const quoteMeters = 7900, quoteFee = 20;
 async function main() {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
@@ -17,7 +20,7 @@ async function main() {
       const context = await browser.newContext({ viewport: { width, height: 900 }, permissions: ["geolocation"], geolocation: { latitude: 41.071, longitude: 28.99 } });
       const page = await context.newPage();
       await page.clock.install({ time: new Date() });
-      const errors = [], calls = []; let created = false, delivered = false, attempts = [], firstAttempt = true, acks = [];
+      const errors = [], calls = []; let created = false, delivered = false, attempts = [], firstAttempt = true, acks = [], quotes = [];
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
       await page.addInitScript((theme) => localStorage.setItem("magazadanal.web.theme.v1", theme), theme);
@@ -33,6 +36,10 @@ async function main() {
         let data;
         if (p.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
         else if (p === "/functions/v1/web-store-search") data = { results: [] };
+        else if (p === "/functions/v1/order-distance-quote") {
+          quotes.push(body);
+          data = { quote_id: quoteID, distance_meters: quoteMeters, fee: quoteFee, source: "google_routes", expires_at: new Date(Date.now() + 1800000).toISOString(), expires_in_seconds: 1800 };
+        }
         else if (p === "/auth/v1/token") {
           if (url.searchParams.get('grant_type') === 'password') assert.equal(body.gotrue_meta_security.captcha_token,'synthetic-order-login-proof');
           data = { access_token: "mock-access-token", refresh_token: "mock-refresh-token", expires_in: 3600, user: { id: owner, email: "customer@example.invalid" } };
@@ -41,16 +48,16 @@ async function main() {
         else if (p === "/rest/v1/customer_addresses") data = [{ id: "30000000-0000-4000-8000-000000000001", title: "Ev", city: "İstanbul", district: "Şişli", neighborhood: "Test Mahallesi", address_line: "Test Sokak", building_no: "1", building_name: "Bina kat 1 daire 2", directions: "Kapı", latitude: 41.07, longitude: 29, is_invoice: true }];
         else if (p === "/rest/v1/orders") data = created ? [{ id: orderID, order_no: "000001", status: delivered ? "delivered" : "payment_waiting", selected_store_count: 1, customer_total: 460, created_at: new Date().toISOString(), order_items: [] }] : [];
         else if (p.endsWith("list_support_tickets_v3")) data = [{ message: "<img src=x onerror=alert(1)>", status: "closed", created_at: new Date().toISOString(), replies: [{ message: "Test yönetici yanıtı" }] }];
-        else if (p.endsWith("list_order_activity")) data = [];
+        else if (p.endsWith("list_order_activity") || p.endsWith("list_order_messages")) data = [];
         else if (p === "/rest/v1/customer_profile_photos") data = [];
         else if (p.endsWith("list_customer_legal_acknowledgements")) data = acks;
         else if (p.endsWith("record_customer_legal_acknowledgement")) { acks.push({ document_type: body.p_document_type, document_version: body.p_document_version, document_hash: body.p_document_hash }); data = true; }
         else if (p.endsWith("validate_promotion_code")) data = [{ authorized: true, result: "valid", normalized_code: "TEST10", discount_percent: 10 }];
-        else if (p.endsWith("create_customer_order_v7")) {
+        else if (p.endsWith("create_customer_order_v9")) {
           attempts.push(body);
           if (firstAttempt) { firstAttempt = false; return route.fulfill({ status: 503, contentType: "application/json", body: "{}" }); }
           created = true;
-          data = [{ authorized: true, result: "already_created", order_id: orderID, amount: width === 768 ? 999 : 424, transfer_code: "TEST-TRANSFER" }];
+          data = [{ authorized: true, result: "already_created", order_id: orderID, amount: width === 768 ? 999 : 444, transfer_code: "TEST-TRANSFER" }];
         }
         else if (p.endsWith("get_order_delivery_code")) data = [{ delivery_code: "1234" }];
         else if (p.endsWith("get_order_courier_position")) data = [];
@@ -106,6 +113,10 @@ async function main() {
       assert.ok((await deliveryOptions.innerText()).includes('1-3 saatte teslim (Tahmini)'));
       assert.ok((await deliveryOptions.innerText()).includes('Gün içinde teslim'));
       assert.ok(!(await deliveryOptions.innerText()).includes('Tahmini gün'));
+      // Km ücreti teslimat seçeneği fiyatlarının içinde (360+20, 288+20); km ve ayrı mesafe satırı gösterilmez.
+      assert.ok((await deliveryOptions.innerText()).includes('380'), await deliveryOptions.innerText());
+      assert.ok((await deliveryOptions.innerText()).includes('308'), await deliveryOptions.innerText());
+      assert.equal(await page.getByText(/Mesafe ücreti|7,9 km|7.9 km/).count(), 0);
       await deliveryOptions.screenshot({path:path.join(output,`delivery-options-${width}-${theme}.png`)});
       await page.getByRole("button", { name: "Öde ve onayla", exact: true }).click();
       await page.getByText("Sipariş sözleşmelerini ve hizmet başlangıcını onayla.", { exact: true }).waitFor();
@@ -137,7 +148,7 @@ async function main() {
       assert.deepEqual(attempts[0], attempts[1], "Retries use identical immutable payload and request ID across reload");
       assert.equal(attempts[1].legal_acceptances.length, 4);
       for (const doc of attempts[1].legal_acceptances) {
-        assert.equal(doc.document_version, '2026-11-17-model-b-10');
+        assert.equal(doc.document_version, '2026-11-19-model-b-13');
         assert.ok(doc.content.includes(legal.service_data_notice));
       }
       for (const doc of legal.profile) assert.ok(acks.some(ack => ack.document_type === doc.p_document_type && ack.document_version === doc.p_document_version && ack.document_hash === doc.p_document_hash));
@@ -149,6 +160,9 @@ async function main() {
       assert.equal(attempts[1].items[0].alternative_size, "İstemiyorum");
       assert.equal(attempts[1].items[0].alternative_color, "İstemiyorum");
       assert.equal(attempts[1].p_promotion_code, "TEST10");
+      assert.equal(attempts[1].p_distance_quote_id, quoteID, "The order carries the server distance quote");
+      assert.ok(quotes.length >= 1 && quotes.every(q => q && typeof q === "object"), "A distance quote was requested");
+      assert.ok(calls.every(c => !/create_customer_order_v[78]$/.test(c.path)), "New orders never use the old v7/v8 path");
       assert.ok(await page.getByText("Ödeme henüz doğrulanmadı.", { exact: true }).isVisible());
       assert.equal(await page.getByText("TEST-TRANSFER", { exact: true }).count(), width === 768 ? 0 : 1);
       if (width === 768) assert.ok(await page.getByText("Sunucu tutarı sepet tahmininden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste.", { exact: true }).isVisible());
@@ -176,12 +190,12 @@ async function main() {
       assert.ok(await page.locator("#account-sidebar").isVisible(), "Menu remains visible after logout");
       assert.ok(await page.locator("#portal-view").isHidden(), "Private content stays hidden after logout");
       assert.equal(await page.locator("[data-cart-count]").innerText(), "", "Public menu does not retain the previous cart count");
-      const submittedBeforeGuestNavigation = calls.filter(c => c.path.endsWith("create_customer_order_v7")).length;
+      const submittedBeforeGuestNavigation = calls.filter(c => c.path.endsWith("create_customer_order_v9")).length;
       await page.locator('#account-sidebar [data-view="shop"]').click();
       assert.ok(await page.locator("#auth-view").isHidden());
       assert.ok(await page.locator('[data-panel="shop"]').isVisible());
       assert.ok(await page.locator('[data-panel="profile"]').isHidden());
-      assert.equal(calls.filter(c => c.path.endsWith("create_customer_order_v7")).length, submittedBeforeGuestNavigation);
+      assert.equal(calls.filter(c => c.path.endsWith("create_customer_order_v9")).length, submittedBeforeGuestNavigation);
       assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((k) => k.includes("draft.v1"))), false);
       assert.ok(calls.every((c) => !c.path.includes("admin_")));
       await context.close(); runs++;

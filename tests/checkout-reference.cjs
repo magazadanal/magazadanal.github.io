@@ -3,12 +3,13 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { chromium } = require("playwright");
 const R = require("../hesabim/order-rules.js");
-const legal = require("../assets/legal-v8.json");
+const legal = require("../assets/legal-v13.json");
 const base = process.env.SITE_TEST_URL || "http://127.0.0.1:8766";
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
 const output = process.env.SITE_SCREENSHOT_DIR || "/private/tmp/ma-checkout-reference-20261108";
 const owner = "10000000-0000-4000-8000-000000000001", orderID = "20000000-0000-4000-8000-000000000001";
 const key = `magazadanal.web.draft.v1.${owner}`;
+const quoteID = "40000000-0000-4000-8000-000000000001";
 async function main() {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}) });
@@ -40,7 +41,7 @@ async function main() {
         if (url.pathname.endsWith("get_public_runtime_status")) data = [{ customer_web_account_enabled: true, customer_ordering_enabled: true }];
         else if (url.pathname === "/auth/v1/token") data = { access_token: "mock", refresh_token: "mock", expires_in: 3600, user: { id: owner, email: "test@example.invalid" } };
         else if (url.pathname === "/rest/v1/profiles") data = [{ id: owner, full_name: "Test Buyer", phone: "+905300000000", role: "customer", is_active: true }];
-        else if (url.pathname === "/rest/v1/customer_addresses" || url.pathname === "/rest/v1/customer_profile_photos" || ["list_support_tickets_v3", "list_order_activity", "get_order_delivery_code", "get_order_courier_position"].some(name => url.pathname.endsWith(name))) data = [];
+        else if (url.pathname === "/rest/v1/customer_addresses" || url.pathname === "/rest/v1/customer_profile_photos" || ["list_support_tickets_v3", "list_order_activity", "get_order_delivery_code", "get_order_courier_position", "list_order_messages"].some(name => url.pathname.endsWith(name))) data = [];
         else if (url.pathname === "/rest/v1/orders") data = created ? [{ id: orderID, order_no: "000123", status: scenario === "existing" ? "delivered" : "payment_waiting", created_at: new Date().toISOString(), customer_total: 460, order_items: [] }] : [];
         else if (url.pathname.endsWith("reserve_customer_checkout_reference")) {
           const id = req.postDataJSON().p_client_request_id; reservations.push(id);
@@ -50,7 +51,9 @@ async function main() {
           data = [{ authorized: true, result: scenario === "existing" ? "already_created" : "reserved", reference_code: codes.get(id), order_id: scenario === "existing" ? orderID : null }];
         } else if (url.pathname.endsWith("list_customer_legal_acknowledgements")) data = legal.profile.map(d => ({ document_type: d.p_document_type, document_version: d.p_document_version, document_hash: d.p_document_hash }));
         else if (url.pathname === "/auth/v1/logout") data = {};
-        else if (url.pathname.endsWith("create_customer_order_v7")) {
+        // Mağaza ile teslimat noktası aynı yerde: 1,2 km, km ücreti 0 TL; tutar 460 TL kalır.
+        else if (url.pathname === "/functions/v1/order-distance-quote") data = { quote_id: quoteID, distance_meters: 1200, fee: 0, source: "google_routes", expires_at: new Date(Date.now() + 1800000).toISOString(), expires_in_seconds: 1800 };
+        else if (url.pathname.endsWith("create_customer_order_v9")) {
           const body = req.postDataJSON(); createCalls.push(body); created = true;
           data = [{ authorized: true, result: "success", order_id: orderID, amount: 460, transfer_code: scenario === "mismatch" ? "999999" : codes.get(body.p_client_request_id) }];
         } else throw Error(url.pathname);
@@ -98,6 +101,8 @@ async function main() {
           await page.getByRole("button", { name: "Öde ve onayla", exact: true }).click();
           await page.getByRole("heading", { name: "Sipariş talebi alındı", exact: true }).waitFor();
           assert.equal(createCalls.length, 1); assert.equal(createCalls[0].p_client_request_id, draft.requestID);
+          assert.equal(createCalls[0].p_distance_quote_id, quoteID);
+          assert.ok(createCalls[0].legal_acceptances.every(d => d.document_version === "2026-11-19-model-b-13"));
           assert.ok(createCalls[0].legal_acceptances.every(d => !d.content.includes(draft.requestID)));
           if (scenario === "mismatch") {
             await page.getByText("Sunucunun açıklama kodu beklenenden farklı. Para göndermeden önce Bize Ulaşın üzerinden kontrol iste.", { exact: true }).waitFor();

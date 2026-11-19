@@ -33,7 +33,9 @@ async function main() {
         if(url.pathname.endsWith('get_public_runtime_status'))data=[{customer_web_account_enabled:true,customer_ordering_enabled:true}];
         else if(url.pathname==='/rest/v1/profiles')data=[{id:owner,role:'customer',is_active:true,full_name:'Test Customer',phone:'+905301234567'}];
         else if(url.pathname==='/rest/v1/customer_addresses')data=[{id:'30000000-0000-4000-8000-000000000001',title:'Home',district:'Şişli',neighborhood:'Test',address_line:'Test',building_no:'1',building_name:'Test building',directions:'Test entry',latitude:41.07,longitude:29,is_invoice:true}];
-        else if(['/rest/v1/orders','/rest/v1/rpc/list_order_activity','/rest/v1/rpc/list_support_tickets_v3'].includes(url.pathname))data=[];
+        else if(['/rest/v1/orders','/rest/v1/customer_profile_photos','/rest/v1/rpc/list_order_activity','/rest/v1/rpc/list_support_tickets_v3','/rest/v1/rpc/list_order_messages'].includes(url.pathname))data=[];
+        // Km teklifi okuma isteğidir; sipariş oluşturmaz.
+        else if(url.pathname==='/functions/v1/order-distance-quote')data={quote_id:'40000000-0000-4000-8000-000000000001',distance_meters:1200,fee:0,source:'google_routes',expires_at:new Date(Date.now()+1800000).toISOString(),expires_in_seconds:1800};
         else throw Error('Unexpected write/request '+url.pathname);
         return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
       });
