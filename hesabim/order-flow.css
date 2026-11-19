@@ -250,6 +250,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 @media (max-width: 540px) { .chat-message { max-width: 94%; } }
 .delivery-guarantee span { display: grid; gap: 4px; }
 .delivery-guarantee small { color: inherit; opacity: .75; }
-.street-choices { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.street-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.street-choices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
 .street-choices[hidden] { display: none; }
-.street-choice { min-height: 44px; }
+.street-choices > span { flex-basis: 100%; font-size: 13px; }
+.order-app .street-choices .street-choice, .app-dialog .street-choices .street-choice { margin: 0; min-height: 40px; padding: 6px 12px; font-size: 14px; }

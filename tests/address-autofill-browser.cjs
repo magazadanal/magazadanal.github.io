@@ -92,7 +92,7 @@ async function main() {
       if (scenario === 'unavailable') {
         await page.getByText('Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin.', {exact: true}).waitFor();
       } else if(partial){
-        const warning=scenario==='partial-district'?'Cadde / sokak ve bina numarasını yaz.':'Cadde / sokağı aşağıdaki seçeneklerden seç veya kendin yaz; bina numarasını yaz.';
+        const warning=scenario==='partial-district'?'Cadde / sokak ve bina numarasını yaz.':'Cadde / sokak kutusunun altındaki seçeneklerden birini seç veya kendin yaz; bina numarasını yaz.';
         await page.getByText(warning,{exact:true}).waitFor();
         assert.equal(await page.locator('[name="district"]').inputValue(),'Beyoğlu');
         assert.equal(await page.locator('[name="neighborhood"]').inputValue(),'Mapped Neighborhood');
@@ -115,6 +115,14 @@ async function main() {
         const choice = scenario === 'newer-pin' ? 'Newer Street' : 'Mapped Street';
         await page.getByRole('group', {name: 'Yakındaki sokaklar'}).getByRole('button', {name: choice, exact: true}).waitFor();
         assert.ok(await page.getByRole('button', {name: 'Second Street', exact: true}).isVisible(), 'Several nearby streets are offered');
+        if (process.env.SITE_SCREENSHOT_DIR && ['desktop', 'mobile'].includes(scenario)) {
+          await fs.mkdir(process.env.SITE_SCREENSHOT_DIR, {recursive: true});
+          await page.locator('[name="address_line"]').scrollIntoViewIfNeeded();
+          await page.screenshot({path: path.join(process.env.SITE_SCREENSHOT_DIR, `address-street-choices-${scenario}.png`)});
+        }
+        const streetBox = await page.locator('[name="address_line"]').boundingBox(), choicesBox = await page.getByRole('group', {name: 'Yakındaki sokaklar'}).boundingBox();
+        assert.ok(choicesBox.y >= streetBox.y + streetBox.height && choicesBox.y - (streetBox.y + streetBox.height) < 40, 'Street choices sit directly under the street box');
+        assert.equal(await page.locator('[name="address_line"]').evaluate(input => input.labels[0].textContent.trim()), 'Cadde / sokak', 'Choices are not part of the street label');
         if (scenario === 'newer-pin') {await page.waitForTimeout(100); assert.equal(await page.getByRole('button', {name: 'Mapped Street', exact: true}).count(), 0, 'A late answer for an older pin is ignored');}
         assert.equal(await page.locator('[name="address_line"]').inputValue(), scenario === 'manual-street' ? 'Customer Corrected Street' : savedEditor ? '' : 'Old Street', 'Nothing is written to the street before the customer chooses');
         if (scenario !== 'manual-street') {
