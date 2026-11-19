@@ -43,10 +43,11 @@ async function main() {
           if (index === 1 && ['manual-number', 'manual-street', 'manual-neighborhood', 'newer-pin', 'navigated-away'].includes(scenario)) await delayed;
           const cors = {'Access-Control-Allow-Origin': '*'};
           if (scenario === 'unavailable') return route.fulfill({status: 503, headers: cors, contentType: 'application/json', body: '{}'});
-          const properties = {countrycode: 'TR', state: 'İstanbul', city: 'Beyoğlu', district: 'Mapped Neighborhood', street: index === 2 ? 'Newer Street' : 'Mapped Street', housenumber: '42'};
-          if (partial) delete properties.housenumber;
-          if (scenario === 'partial-district') delete properties.street;
-          return route.fulfill({headers: cors, contentType: 'application/json', body: JSON.stringify({type: 'FeatureCollection', features: [{type: 'Feature', properties, geometry: {type: 'Point', coordinates: [point.longitude, point.latitude]}}]})});
+          const at = (properties, dx = 0) => ({type: 'Feature', properties: {countrycode: 'TR', state: 'İstanbul', city: 'Beyoğlu', ...properties}, geometry: {type: 'Point', coordinates: [point.longitude + dx, point.latitude]}});
+          // The nearest shop names a street and a door number; neither may be filled without the customer's choice.
+          const features = [at({type: 'house', osm_key: 'amenity', osm_value: 'cafe', district: 'Mapped Neighborhood', ...(scenario === 'partial-district' ? {} : {street: index === 2 ? 'Newer Street' : 'Mapped Street', housenumber: '42'})})];
+          if (scenario !== 'partial-district') features.push(at({type: 'street', osm_key: 'highway', osm_value: 'residential', name: 'Second Street', district: 'Mapped Neighborhood'}, 0.0003));
+          return route.fulfill({headers: cors, contentType: 'application/json', body: JSON.stringify({type: 'FeatureCollection', features})});
         }
         assert.equal(url.origin, 'https://zxqqbzggfbxoasyhueqb.supabase.co', 'All external requests are intercepted');
         let data;
@@ -84,23 +85,25 @@ async function main() {
       if (scenario === 'manual-street') await page.locator('[name="address_line"]').fill('Customer Corrected Street');
       if (scenario === 'manual-neighborhood') await page.locator('[name="neighborhood"]').fill('Customer Corrected Neighborhood');
       if (scenario === 'newer-pin') {
-        await choose(140); await page.waitForFunction(() => document.querySelector('[name="address_line"]').value === 'Newer Street');
+        await choose(140); await page.getByRole('button', {name: 'Newer Street', exact: true}).waitFor();
       }
       if (scenario === 'navigated-away') await page.getByRole('button', {name: 'Profil', exact: true}).click();
       releaseFirst();
       if (scenario === 'unavailable') {
         await page.getByText('Adres otomatik alınamadı. Seçtiğin konum korunuyor; alanları elle doldurabilirsin.', {exact: true}).waitFor();
       } else if(partial){
-        const warning=scenario==='partial-district'?'Haritada bulunamayan bilgiler: Cadde / sokak, Bina numarası. Bu alanları kontrol edip tamamla.':'Haritada bulunamayan bilgiler: Bina numarası. Bu alanları kontrol edip tamamla.';
+        const warning=scenario==='partial-district'?'Cadde / sokak ve bina numarasını yaz.':'Cadde / sokağı aşağıdaki seçeneklerden seç veya kendin yaz; bina numarasını yaz.';
         await page.getByText(warning,{exact:true}).waitFor();
         assert.equal(await page.locator('[name="district"]').inputValue(),'Beyoğlu');
         assert.equal(await page.locator('[name="neighborhood"]').inputValue(),'Mapped Neighborhood');
-        assert.equal(await page.locator('[name="address_line"]').inputValue(),scenario==='partial-district'?'':'Mapped Street');
+        assert.equal(await page.locator('[name="address_line"]').inputValue(),'','A street is never filled without the customer choosing it');
+        assert.equal(await page.getByRole('group',{name:'Yakındaki sokaklar'}).isVisible(),scenario!=='partial-district');
+        if(scenario==='partial-street'){await page.getByRole('button',{name:'Mapped Street',exact:true}).click();assert.equal(await page.locator('[name="address_line"]').inputValue(),'Mapped Street');}
         assert.equal(await page.locator('[name="building_no"]').inputValue(),'','No invented building number');
         if(scenario==='partial-district'){
           await page.locator('[name="address_line"]').fill('Customer Verified Street');
           assert.ok(await page.getByRole('button',{name:'✓ Haritadan seçilen konum · Değiştir',exact:true}).isVisible());
-          await choose(140);await page.getByText('Haritada bulunamayan bilgiler: Bina numarası. Bu alanları kontrol edip tamamla.',{exact:true}).waitFor();
+          await choose(140);await page.getByText('Cadde / sokak ve bina numarasını yaz.',{exact:true}).waitFor();
           assert.equal(await page.locator('[name="address_line"]').inputValue(),'Customer Verified Street');
         }
       } else if (scenario === 'navigated-away') {
@@ -109,11 +112,19 @@ async function main() {
         assert.equal(stored.draft.address.address_line, 'Old Street');
         await context.close(); continue;
       } else {
-        await page.waitForFunction(() => ['Mapped Street', 'Newer Street', 'Customer Corrected Street'].includes(document.querySelector('[name="address_line"]').value));
-        if (scenario === 'newer-pin') {await page.waitForTimeout(100); assert.equal(await page.locator('[name="address_line"]').inputValue(), 'Newer Street');}
+        const choice = scenario === 'newer-pin' ? 'Newer Street' : 'Mapped Street';
+        await page.getByRole('group', {name: 'Yakındaki sokaklar'}).getByRole('button', {name: choice, exact: true}).waitFor();
+        assert.ok(await page.getByRole('button', {name: 'Second Street', exact: true}).isVisible(), 'Several nearby streets are offered');
+        if (scenario === 'newer-pin') {await page.waitForTimeout(100); assert.equal(await page.getByRole('button', {name: 'Mapped Street', exact: true}).count(), 0, 'A late answer for an older pin is ignored');}
+        assert.equal(await page.locator('[name="address_line"]').inputValue(), scenario === 'manual-street' ? 'Customer Corrected Street' : savedEditor ? '' : 'Old Street', 'Nothing is written to the street before the customer chooses');
+        if (scenario !== 'manual-street') {
+          await page.getByRole('button', {name: choice, exact: true}).click();
+          assert.equal(await page.locator('[name="address_line"]').inputValue(), choice);
+          assert.equal(await page.getByRole('group', {name: 'Yakındaki sokaklar'}).isVisible(), false);
+        }
         assert.equal(await page.locator('[name="district"]').inputValue(), 'Beyoğlu');
         assert.equal(await page.locator('[name="neighborhood"]').inputValue(), scenario==='manual-neighborhood'?'Customer Corrected Neighborhood':'Mapped Neighborhood');
-        assert.equal(await page.locator('[name="building_no"]').inputValue(), scenario === 'manual-number' ? '99' : '42');
+        assert.equal(await page.locator('[name="building_no"]').inputValue(), scenario === 'manual-number' ? '99' : savedEditor ? '' : '1', 'The door number is never taken from a nearby shop');
         if(scenario==='manual-street')assert.equal(await page.locator('[name="address_line"]').inputValue(),'Customer Corrected Street');
       }
       assert.equal(await page.locator('[name="building_name"]').inputValue(), savedEditor ? '' : draft.address.building_name);
@@ -173,6 +184,6 @@ async function main() {
       assert.deepEqual(errors, []); await context.close();
     }
   } finally {await browser.close();}
-  console.log('PASS: explicit points fill safe address fields, including saved addresses with a pending receipt; failures keep manual entry; late responses, manual edits and newer pins are preserved; stale checkout errors cleared. Local synthetic data only.');
+  console.log('PASS: explicit points fill district/neighbourhood and offer nearby streets to choose, never a guessed street or door number, including saved addresses with a pending receipt; failures keep manual entry; late responses, manual edits and newer pins are preserved; stale checkout errors cleared. Local synthetic data only.');
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});

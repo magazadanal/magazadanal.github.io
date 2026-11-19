@@ -31,12 +31,33 @@
       const district = districts.find(name => [p.county, p.city, p.district, p.locality].some(value => folded(value) === folded(name)));
       if (!district && ![p.city, p.state].some(value => folded(value) === "istanbul")) continue;
       const neighborhood = [p.district, p.locality].map(text).find(value => value && !districts.some(name => folded(name) === folded(value)) && !["istanbul", "turkiye", "turkey"].includes(folded(value)));
-      // Photon names street objects in `name`; a business/POI name is not a street address.
-      const street = text(p.street) || (p.type === "street" && p.osm_key === "highway" ? text(p.name) : "");
-      return Object.fromEntries(Object.entries({ city: "İstanbul", district, neighborhood,
-        address_line: street, building_no: text(p.housenumber) }).filter(([, value]) => value));
+      // Street and door number are not taken from a single result: the nearest shop's address often names a
+      // neighbouring street (measured 2026-11-19), and a wrong street misleads the courier. See streetOptions.
+      return Object.fromEntries(Object.entries({ city: "İstanbul", district, neighborhood }).filter(([, value]) => value));
     }
     return {};
+  }
+
+  // Platforms, service roads and paths are not delivery streets.
+  const SKIP = new Set(["service", "platform", "bus_stop", "footway", "steps", "path", "track", "cycleway", "corridor", "elevator", "bus_station"]);
+  const streetKey = name => folded(name).replace(/\b(sokagi|sokak|sk|caddesi|cadde|cd|bulvari|bulvar|araligi|aralik|cikmazi|cikmaz)\b\.?/g, "").replace(/\s+/g, " ").trim();
+  // Up to four nearby street names for the customer to choose from. Nearer and repeated names rank first;
+  // "X Sokak" and "X Sokağı" count as one street.
+  function streetOptions(data, point, max = 4) {
+    if (!Array.isArray(data?.features)) return [];
+    const ranked = new Map();
+    data.features.slice(0, 10).forEach((row, index) => {
+      const xy = row?.geometry?.coordinates, p = row?.properties;
+      if (row?.geometry?.type !== "Point" || !Array.isArray(xy) || xy.length !== 2 || !p || !istanbulPoint(xy[1], xy[0])
+        || Math.abs(xy[1] - point.latitude) > 0.003 || Math.abs(xy[0] - point.longitude) > 0.004
+        || (p.countrycode && String(p.countrycode).toUpperCase() !== "TR") || SKIP.has(p.osm_value)) return;
+      const name = p.type === "street" && p.osm_key === "highway" ? text(p.name) : text(p.street);
+      const key = name && streetKey(name);
+      if (!key) return;
+      const entry = ranked.get(key) || { name, score: 0, first: index };
+      entry.score += 1 / (1 + index); ranked.set(key, entry);
+    });
+    return [...ranked.values()].sort((a, b) => b.score - a.score || a.first - b.first).slice(0, max).map(entry => entry.name);
   }
 
   function storeQuery(store, query) {
@@ -76,8 +97,10 @@
   async function reverseAddress(latitude, longitude, fetcher = globalThis.fetch.bind(globalThis)) {
     if (!istanbulPoint(latitude, longitude)) return {};
     const point = { latitude, longitude };
-    const data = await request("/reverse", { lat: String(latitude), lon: String(longitude), radius: "1", limit: "1" }, fetcher);
-    return cleanAddress(data, point);
+    const data = await request("/reverse", { lat: String(latitude), lon: String(longitude), radius: "0.15", limit: "10" }, fetcher);
+    const address = cleanAddress(data, point);
+    const streets = streetOptions(data, point);
+    return streets.length ? { ...address, street_options: streets } : address;
   }
 
   async function searchStores(store, query, fetcher = globalThis.fetch.bind(globalThis)) {
@@ -87,5 +110,5 @@
     return cleanResults(data);
   }
 
-  return { BASE, stores, cleanAddress, storeQuery, cleanResults, reverseAddress, searchStores };
+  return { BASE, stores, cleanAddress, streetOptions, storeQuery, cleanResults, reverseAddress, searchStores };
 });
