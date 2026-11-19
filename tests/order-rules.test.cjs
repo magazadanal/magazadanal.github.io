@@ -41,7 +41,7 @@ function draft() {
 }
 test("33 native stores; exact fee parity including each additional store and product", () => {
   assert.equal(stores.length, 33);
-  assert.deepEqual(R.totals([item()], true), { products: 100, service: 360, discount: 0, guarantee: 0, total: 460, stores: 1 });
+  assert.deepEqual(R.totals([item()], true), { products: 100, service: 360, distance: 0, serviceTotal: 360, discount: 0, guarantee: 0, total: 460, stores: 1 });
   assert.equal(R.totals([item()], false).service, 288);
   assert.equal(R.totals([item(), item({ store: "Zara" })], true).service, 466);
   assert.equal(R.totals([item(), item()], true).service, 396);
@@ -154,7 +154,7 @@ test("client stays fixed-origin, no privileged credential or direct order writes
   assert.ok(account.includes('redirect: "error"'));
   assert.ok(account.includes("generation !== state.generation"));
   assert.ok(flow.includes('"create_customer_order_v7", frozen.payload)'));
-  assert.ok(flow.includes('"create_customer_order_v8"') && flow.includes('get_delivery_guarantee_offer'));
+  assert.ok(flow.includes('"create_customer_order_v8"') && !flow.includes('get_delivery_guarantee_offer'));
   assert.ok(!flow.includes('localStorage.setItem'));
   assert.ok(!flow.includes('innerHTML'));
   assert.ok(!account.includes('innerHTML'));

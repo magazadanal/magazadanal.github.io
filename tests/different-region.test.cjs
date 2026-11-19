@@ -5,11 +5,11 @@ const R = require("../hesabim/order-rules.js");
 const item = (store = "Zara") => ({ store, estimated_price: 100 });
 const address = (extra = {}) => ({ customer_name: "Test Kişi", customer_phone: "05321234567", neighborhood: "Merkez", address_line: "Cadde", building_no: "1", building_name: "Bina", directions: "Tarif", latitude: 41, longitude: 29, ...extra });
 
-test("different region starts at 783 TL for both delivery options and keeps extra fees", () => {
-  assert.equal(R.totals([item()], true, 0, false, true).service, 783);
-  assert.equal(R.totals([item()], false, 0, false, true).service, 783);
-  assert.equal(R.totals([item(), item("Mango")], true, 0, false, true).service, 889);
-  assert.equal(R.totals([item(), item()], false, 0, false, true).service, 819);
+test("different region starts at 450 TL for both delivery options and keeps extra fees", () => {
+  assert.equal(R.totals([item()], true, 0, false, true).service, 450);
+  assert.equal(R.totals([item()], false, 0, false, true).service, 450);
+  assert.equal(R.totals([item(), item("Mango")], true, 0, false, true).service, 556);
+  assert.equal(R.totals([item(), item()], false, 0, false, true).service, 486);
   assert.equal(R.totals([item()], true).service, 360);
 });
 

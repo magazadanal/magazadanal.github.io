@@ -57,7 +57,7 @@ test('v7 frozen evidence stays unchanged while notices stay v8 and orders select
   for (const row of previous.profile) assert.equal(hash(row.p_document_text), hashes[row.p_document_type]);
   for (const file of ['hesabim/order-flow.js', 'alisveris-kosullari/conditions.js']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.ok(source.includes('/assets/legal-v10.json'));
+    assert.ok(source.includes('/assets/legal-v13.json'));
     assert.ok(!source.includes('/assets/legal-v7.json'));
   }
 });

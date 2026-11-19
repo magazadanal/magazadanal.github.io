@@ -51,6 +51,7 @@ async function main() {
           if(partial)delete data.address.building_no;
           if(scenario==='partial-district')delete data.address.address_line;
         } else if (['/rest/v1/orders', '/rest/v1/customer_addresses', '/rest/v1/rpc/list_support_tickets_v3', '/rest/v1/rpc/list_order_activity'].includes(url.pathname)) data = [];
+        else if (url.pathname === '/functions/v1/order-distance-quote') data = {quote_id:'40000000-0000-4000-8000-000000000001',distance_meters:1200,fee:0,source:'google_routes',expires_at:new Date(Date.now()+1800000).toISOString(),expires_in_seconds:1800};
         else throw Error('Unexpected request/write: ' + url.pathname);
         return route.fulfill({contentType: 'application/json', body: JSON.stringify(data)});
       });
@@ -66,13 +67,13 @@ async function main() {
       }
       async function choose(x) {
         const before = lookups.length;
-        await page.getByRole('button', {name: /^Teslimat konumu/}).click();
+        await page.getByRole('button', {name: /^(Teslimat konumu|✓ Haritadan seçilen konum)/}).click();
         assert.equal(lookups.length, before, 'Opening a map must not transmit a coordinate to reverse lookup');
         await page.locator('.app-map').click({position: {x, y: 170}});
         await page.getByRole('button', {name: 'Bu konumu kullan', exact: true}).click();
       }
       await choose(120);
-      await page.getByRole('button', {name: 'Teslimat konumu seçildi · Değiştir', exact: true}).waitFor();
+      await page.getByRole('button', {name: '✓ Haritadan seçilen konum · Değiştir', exact: true}).waitFor();
       await started;
       if (scenario === 'manual-number') await page.locator('[name="building_no"]').fill('99');
       if (scenario === 'manual-street') await page.locator('[name="address_line"]').fill('Customer Corrected Street');
@@ -93,7 +94,7 @@ async function main() {
         assert.equal(await page.locator('[name="building_no"]').inputValue(),'','No invented building number');
         if(scenario==='partial-district'){
           await page.locator('[name="address_line"]').fill('Customer Verified Street');
-          assert.ok(await page.getByRole('button',{name:'Teslimat konumu seçildi · Değiştir',exact:true}).isVisible());
+          assert.ok(await page.getByRole('button',{name:'✓ Haritadan seçilen konum · Değiştir',exact:true}).isVisible());
           await choose(140);await page.getByText('Haritada bulunamayan bilgiler: Bina numarası. Bu alanları kontrol edip tamamla.',{exact:true}).waitFor();
           assert.equal(await page.locator('[name="address_line"]').inputValue(),'Customer Verified Street');
         }
@@ -140,11 +141,11 @@ async function main() {
         await choose(140);await settled();assert.equal(await page.locator('[name="district"]').inputValue(),'Şişli');
       }
       await page.locator('[name="building_no"]').fill('9');
-      assert.ok(await page.getByRole('button', {name: 'Teslimat konumu seçildi · Değiştir', exact: true}).isVisible(), 'Correcting the building number preserves the chosen map point');
+      assert.ok(await page.getByRole('button', {name: '✓ Haritadan seçilen konum · Değiştir', exact: true}).isVisible(), 'Correcting the building number preserves the chosen map point');
       assert.equal(await page.locator('#order-status').isVisible(), false, 'A valid selected location clears the old location error immediately');
       if (savedEditor) {
         await page.locator('[name="address_line"]').fill('Saved Corrected Street');await page.locator('[name="neighborhood"]').fill('Saved Corrected Neighborhood');
-        assert.ok(await page.getByRole('button',{name:'Teslimat konumu seçildi · Değiştir',exact:true}).isVisible());
+        assert.ok(await page.getByRole('button',{name:'✓ Haritadan seçilen konum · Değiştir',exact:true}).isVisible());
         await choose(140);await settled();
         assert.equal(await page.locator('[name="address_line"]').inputValue(),'Saved Corrected Street');assert.equal(await page.locator('[name="neighborhood"]').inputValue(),'Saved Corrected Neighborhood');
         const stored = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)), key);

@@ -42,11 +42,10 @@ test('v10 documents are unaffected by the new placeholder', async () => {
   const docs = await R.documents(draft({deliveryGuarantee: true}), v10, 'a@b.invalid', stores);
   assert.ok(docs.every(d => !d.content.includes('{{')));
 });
-test('client wiring: lazy v11 only when offer enabled, offer row, unavailable status, order detail, no CSP change needed', () => {
+test('client wiring: v13 path never offers the guarantee, offer row, unavailable status, order detail, no CSP change needed', () => {
   const flow = fs.readFileSync(path.join(__dirname, '../hesabim/order-flow.js'), 'utf8');
   const account = fs.readFileSync(path.join(__dirname, '../hesabim/hesabim.js'), 'utf8');
-  assert.ok(flow.includes('/assets/legal-v11.json') && flow.includes('row?.enabled === true'));
-  assert.ok(!/Promise\.all\(\[[^\]]*legal-v11/.test(flow));
+  assert.ok(!flow.includes('/assets/legal-v11.json') && !flow.includes('get_delivery_guarantee_offer'));
   assert.ok(flow.includes('Teslimat Güvencesi — ') && flow.includes('Sigorta değildir; yasal haklarınız saklıdır.'));
   assert.ok(flow.includes('delivery_guarantee_unavailable'));
   assert.ok(flow.includes('box.checked = draft.deliveryGuarantee === true'));

@@ -55,7 +55,7 @@ async function main() {
           if (p.endsWith('get_public_runtime_status')) data = [{customer_web_account_enabled: true, customer_ordering_enabled: true}];
           else if (p === '/rest/v1/profiles') data = [{id: owner, full_name: 'Test Müşteri', phone: '+905300000000', role: 'customer', is_active: true}];
           else if (p === '/rest/v1/orders') data = [{id: orderID, order_no: '000001', status: scenario.startsWith('active-photo-') ? 'on_the_way' : 'delivered', customer_total: 860, selected_store_count: 1, payment_method: 'bank_transfer', created_at: '2026-11-12T10:00:00Z', order_items: ids.map((id, i) => ({id, store_name: `Mağaza ${i + 1}`, product_name: 'Test Ürün', size: 'M', color: 'Siyah', estimated_price: 100}))}];
-          else if (p === '/rest/v1/customer_addresses' || p.endsWith('list_support_tickets_v3') || p.endsWith('list_order_activity') || p.endsWith('get_order_courier_position')) data = [];
+          else if (p === '/rest/v1/customer_addresses' || p.endsWith('list_support_tickets_v3') || p.endsWith('list_order_activity') || p.endsWith('list_order_messages') || p.endsWith('get_order_courier_position')) data = [];
           else if (p.endsWith('get_order_product_photos')) {
             photoCalls++;
             const batch = request.postDataJSON().target_item_ids;

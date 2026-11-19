@@ -30,6 +30,7 @@ async function main() {
         else if(p==='/rest/v1/profiles') data=[{id:owner,role:'customer',full_name:'Synthetic Customer',phone:'+905300000000',is_active:true}];
         else if(p==='/rest/v1/orders') data=[{id:order,order_no:'000001',status:scenario==='terminal'?'delivered':'courier_assigned',selected_store_count:1,customer_total:460,created_at:'2026-11-12T11:00:00Z',order_items:[]}];
         else if(p.endsWith('list_order_activity')) data=events;
+        else if(p.endsWith('list_order_messages')) data=[];
         else if(p.endsWith('customer_respond_to_order_request')) {
           const payload=request.postDataJSON();assert.equal(payload.target_order_id,order);assert.equal(payload.target_request_id,latest.id);writes.push(payload);entered=true;
           if(['double-click','late-logout'].includes(scenario)) await pending;
