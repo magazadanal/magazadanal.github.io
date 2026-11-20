@@ -43,7 +43,7 @@ test('proof sharing is explicit without granting automatic app access or couplin
 test('public privacy contains the identical sharing and proof clauses, each once (KVKK v12)', () => {
   const html = fs.readFileSync(path.join(__dirname, '../privacy/index.html'), 'utf8');
   const current = require('../assets/legal-v10.json'); // v10 catalog carries the KVKK v12 profile text (v8 catalog above is frozen history)
-  assert.ok(html.includes('2026-11-18-model-b-12'));
+  assert.ok(html.includes('2026-11-20-model-b-14')); // KVKK v14 (2026-11-20)
   const [purpose, courier, recipients, basis] = current.service_data_notice.split('\n\n');
   for (const paragraph of [courier, recipients]) assert.equal(html.split(`<p>${paragraph}</p>`).length, 2, paragraph);
   // Purpose and legal-basis paragraphs were duplicates of KVKK sections 2, 3 and 5; v12 tells them once there.

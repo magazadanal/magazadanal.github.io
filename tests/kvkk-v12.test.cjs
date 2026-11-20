@@ -14,9 +14,11 @@ const kvkk = v10.profile.find(p => p.p_document_type === 'kvkk_notice');
 const count = (text, part) => text.split(part).length - 1;
 
 test('only the KVKK notice moves to v12; membership and privacy stay v10 word for word', () => {
-  assert.equal(kvkk.p_document_version, '2026-11-18-model-b-12');
-  assert.equal(kvkk.p_document_hash, KVKK_V12);
-  assert.equal(hash(kvkk.p_document_text), KVKK_V12);
+  // KVKK v14 (2026-11-20) adds one paragraph; without it the text is the v12 text byte for byte (see kvkk-v14.test.cjs).
+  assert.equal(kvkk.p_document_version, '2026-11-20-model-b-14');
+  const v12Text = kvkk.p_document_text.split('\n\n').filter(p => !p.startsWith('Adres doldurma ve harita: ')).join('\n\n');
+  assert.equal(hash(v12Text), KVKK_V12);
+  assert.equal(hash(kvkk.p_document_text), kvkk.p_document_hash);
   assert.notEqual(KVKK_V12, KVKK_V10);
   for (const [type, h] of Object.entries(UNCHANGED)) {
     const row = v10.profile.find(p => p.p_document_type === type);
