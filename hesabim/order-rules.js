@@ -325,7 +325,10 @@
     return { rows, cursor: next, hasMore: rows.length === 100 };
   }
   // Kullanıcı kararı (2026-11-18): KVKK v12 mevcut kullanıcılara yeniden gösterilmez; v10 KVKK onayı geçerli.
-  const STILL_ACCEPTED_PROFILE_ACKS = { kvkk_notice: [["2026-11-17-model-b-10", "4c10e338b87db72429e88619c68e4d9aaabd6c4038089166d0101a774509e19f"]] };
+  // Kullanıcı kararı (2026-11-20): KVKK v14 de yeniden gösterilmez; v10 ve v12 KVKK onayları geçerli.
+  const STILL_ACCEPTED_PROFILE_ACKS = { kvkk_notice: [
+    ["2026-11-17-model-b-10", "4c10e338b87db72429e88619c68e4d9aaabd6c4038089166d0101a774509e19f"],
+    ["2026-11-18-model-b-12", "da356feae6842e54cc33cfda046871a18fd23c115c54a21583b9f3fe8b473fdc"]] };
   function profileAckAccepted(doc, ack) {
     if (!doc || !ack || ack.document_type !== doc.p_document_type) return false;
     if (ack.document_version === doc.p_document_version && ack.document_hash === doc.p_document_hash) return true;
