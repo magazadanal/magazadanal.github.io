@@ -599,9 +599,9 @@
       let lookupVersion = 0;
       const feedback = el("p", undefined, "muted"); feedback.setAttribute("role", "status"); feedback.hidden = true;
       const streetChoices = el("div", undefined, "street-choices"); streetChoices.setAttribute("role", "group"); streetChoices.setAttribute("aria-label", "Yakındaki sokaklar"); streetChoices.hidden = true;
-      // Nearby street choices sit directly under the street box, outside its <label> so they do not become part of its name.
+      // Nearby street choices sit directly above the street box (user decision 2026-11-20), outside its <label> so they do not become part of its name.
       const streetLabel = inputs.address_line.closest("label"), streetCell = el("div", undefined, "street-cell");
-      streetLabel.replaceWith(streetCell); streetCell.append(streetLabel, streetChoices);
+      streetLabel.replaceWith(streetCell); streetCell.append(streetChoices, streetLabel);
       const locationButton = button("", () => choosePoint(address, async (p) => {
         const panel = parent.closest("[data-panel]");
         if (!feedback.isConnected || panel?.hidden || !owner || busy || (frozen && panel?.dataset.panel === "cart")) return;
@@ -645,7 +645,7 @@
           }
           const missing = mappedFields.filter(([key]) => !(key === "district" && address.different_region_selected === true)
             && !valid(key, data?.address?.[key]) && !(corrected.has(key) && inputs[key].value.trim())).map(([, title]) => title);
-          const streetHint = streets.length ? "Cadde / sokak kutusunun altındaki seçeneklerden birini seç veya kendin yaz; bina numarasını yaz." : "Cadde / sokak ve bina numarasını yaz.";
+          const streetHint = streets.length ? "Cadde / sokak kutusunun üstündeki seçeneklerden birini seç veya kendin yaz; bina numarasını yaz." : "Cadde / sokak ve bina numarasını yaz.";
           feedback.hidden = false;
           feedback.textContent = !filled && !corrected.size && !streets.length ? "Adres otomatik bulunamadı. Alanları elle doldurabilirsin."
             : missing.length ? `Haritada bulunamayan bilgiler: ${missing.join(", ")}. ${streetHint}` : streetHint;
