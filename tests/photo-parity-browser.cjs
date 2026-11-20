@@ -42,7 +42,11 @@ async function main() {
         let release; const deferred = new Promise(resolve => { release = resolve; });
         await page.addInitScript(({owner, theme}) => {
           localStorage.setItem('magazadanal.web.theme.v1', theme);
-          sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, user: {id: owner, email: 'test@example.invalid'}}));
+          // Seed the session on the first load only: logout reloads /hesabim/ and must land on the sign-in form.
+          if (!sessionStorage.getItem('photo-test-seeded')) {
+            sessionStorage.setItem('photo-test-seeded', '1');
+            sessionStorage.setItem('magazadanal.web.session.v1', JSON.stringify({accessToken: 'synthetic-access', refreshToken: 'synthetic-refresh', expiresAt: Date.now() + 3600000, user: {id: owner, email: 'test@example.invalid'}}));
+          }
         }, {owner, theme});
         await context.route('**/*', async route => {
           const request = route.request(), url = new URL(request.url()), p = url.pathname;
