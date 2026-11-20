@@ -20,9 +20,13 @@ async function main() {
         return route.continue();
       });
       await page.goto(base + '/privacy/');
-      for (const paragraph of legal.service_data_notice.split('\n\n')) assert.ok((await page.locator('main').innerText()).includes(paragraph));
+      // KVKK v12 (2026-11-18): the page tells the courier and recipient sharing once; the purpose and legal-basis
+      // paragraphs were duplicates of KVKK sections 2, 3 and 5 and are not repeated (same rule as service-data-sharing.test.cjs).
+      const [purpose, courier, recipients, basis] = legal.service_data_notice.split('\n\n'), mainText = await page.locator('main').innerText();
+      for (const paragraph of [courier, recipients]) assert.equal(mainText.split(paragraph).length, 2, paragraph);
+      for (const paragraph of [purpose, basis]) assert.ok(!mainText.includes(paragraph), paragraph);
       assert.ok((await page.locator('main').innerText()).includes(legal.delivery_proof_notice));
-      await page.getByRole('heading', {name:'9. Müşteri bilgileri, fotoğraflar ve sipariş konumu',exact:true}).scrollIntoViewIfNeeded();
+      await page.getByRole('heading', {name:'9. Fotoğraflar ve sipariş konumu',exact:true}).scrollIntoViewIfNeeded();
       await page.screenshot({path:path.join(output,`sharing-notice-${width}.png`)});
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.goto(base + '/alisveris-kosullari/');
